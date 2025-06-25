@@ -96,6 +96,11 @@ struct TypeMap
         return false;
     }
 
+    template <typename KEY>
+    struct ItemAt {
+        static_assert(AlwaysFalse<KEY>::value,"Key does not exist in type map.");
+    };
+
     template <typename OTHER>
     struct Union;
 
@@ -168,6 +173,26 @@ struct TypeMap <HEAD,TAIL...>
         !TypeMap<HEAD,TAIL...>::has_duplicate_key(),
         "TypeMap cannot contain duplicate key types."
     );
+
+
+    template <typename KEY,typename ENABLE=void>
+    struct ItemAt;
+
+    template <typename KEY>
+    struct ItemAt <
+        KEY,
+        typename std::enable_if<!(std::is_same<Key,KEY>::value)>::type
+    > {
+        typedef typename Tail::template ItemAt<Key>::type type;
+    };
+
+    template <typename KEY>
+    struct ItemAt <
+        KEY,
+        typename std::enable_if<std::is_same<Key,KEY>::value>::type
+    > {
+        typedef Type type;
+    };
 
 
     template <typename OTHER,typename ENABLE=void>
@@ -554,6 +579,41 @@ union ArrayUnion <TypeArray<HEAD,TAIL...>> {
     }
 };
 
+
+template <typename MAP> struct FuncMap;
+
+template <typename... ITEMS>
+struct FuncMap <TypeMap<ITEMS...>> {
+    template<typename KEY,typename... ARGS>
+    decltype(auto) func(ARGS... args)
+    {
+        return TypeMap<ITEMS...>::MapType::template ItemAt<KEY>::func(args...);
+    }
+};
+
+
+template <typename SET> struct FuncSet;
+
+template <typename... ITEMS>
+struct FuncSet <TypeSet<ITEMS...>> {
+    template<typename ITEM,typename... ARGS>
+    decltype(auto) func(ARGS... args)
+    {
+        return TypeSet<ITEMS...>::MapType::template ItemAt<ITEM>::func(args...);
+    }
+};
+
+
+template <typename ARRAY> struct FuncArray;
+
+template <typename... ITEMS>
+struct FuncArray <TypeArray<ITEMS...>> {
+    template<size_t INDEX,typename... ARGS>
+    decltype(auto) func(ARGS... args)
+    {
+        return TypeArray<ITEMS...>::MapType::template ItemAt<TypeIndex<INDEX>>::func(args...);
+    }
+};
 
 
 
