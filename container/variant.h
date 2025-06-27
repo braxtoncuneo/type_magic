@@ -1,5 +1,5 @@
-#ifndef HARMONIZE_CONTAINER_UNION
-#define HARMONIZE_CONTAINER_UNION
+#ifndef HARMONIZE_CONTAINER_VARIANT
+#define HARMONIZE_CONTAINER_VARIANT
 
 #include "type.h"
 #include "undef.h"
@@ -9,86 +9,11 @@
 // MapVariant
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename MAP> union MapVariant;
-
-template <typename... ITEMS>
-struct MapVariant <TypeMap<ITEMS...>> {
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type map.");
-    }
-};
-
-
-template <typename HEAD, typename... TAIL>
-struct MapVariant <TypeMap<HEAD,TAIL...>> {
-
-    typedef TypeMap<HEAD,TAIL...> MapType;
-    typedef typename MapType::Type Type;
-    typedef MapVariant<TypeMap<TAIL...>> Tail;
-
-    Type data;
-    Tail tail;
-
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
-                return data;
-            } else {
-                return tail.template get<KEY>();
-            }
-        } else {
-            static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type map.");
-            return UndefinedType::value;
-        }
-    }
-};
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // SetVariant
 ///////////////////////////////////////////////////////////////////////////////
-
-template <typename SET> union SetVariant;
-
-template <typename... ITEMS>
-struct SetVariant <TypeSet<ITEMS...>> {
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type set.");
-    }
-};
-
-
-template <typename HEAD, typename... TAIL>
-struct SetVariant <TypeSet<HEAD,TAIL...>> {
-
-    typedef typename TypeSet<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::Type Type;
-    typedef SetVariant<TypeSet<TAIL...>> Tail;
-
-    Type data;
-    Tail tail;
-
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
-                return data;
-            } else {
-                return tail.template get<KEY>();
-            }
-        } else {
-            static_assert(AlwaysFalse<KEY>::VALUE,"Item does not exist in type set.");
-            return UndefinedType::value;
-        }
-    }
-};
 
 
 
@@ -96,44 +21,126 @@ struct SetVariant <TypeSet<HEAD,TAIL...>> {
 // ArrayVariant
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename SET> union ArrayVariant;
+
+
+template <typename ARRAY> struct ArrayVariant;
 
 template <typename... ITEMS>
 struct ArrayVariant <TypeArray<ITEMS...>> {
+
+    typedef typename TypeArray<ITEMS...>::MapType MapType;
+
+    static constexpr size_t ITEM_COUNT = TypeArray<ITEMS...>::MapType::ITEM_COUNT;
+
+    private:
+    size_t index_value;
+
+
+    public:
+
+
     template<size_t INDEX>
-    constexpr auto& get ()
+    struct ItemAt {
+        typedef typename MapType::template ItemAt<TypeIndex<INDEX>>::type type;
+    };
+
+
+    ArrayUnion<TypeArray<ITEMS...>> field;
+
+    ArrayVariant <TypeArray<ITEMS...>> ()
+        : index_value(ITEM_COUNT)
+    {}
+
+    constexpr size_t index() const
     {
-        static_assert(AlwaysFalse<TypeIndex<INDEX>>::VALUE,"Index does not exist in type array.");
+        return index_value;
     }
-};
 
-
-template <typename HEAD, typename... TAIL>
-struct ArrayVariant <TypeArray<HEAD,TAIL...>> {
-
-    typedef typename TypeArray<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::Type Type;
-    typedef ArrayVariant<TypeSet<TAIL...>> Tail;
-
-    Type data;
-    Tail tail;
+    constexpr bool valid() const
+    {
+        return (index() >= 0) && (index() <ITEM_COUNT);
+    }
 
     template<size_t INDEX>
-    constexpr auto& get ()
+    constexpr bool holds() const
     {
-        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::Key>::value) {
-                return data;
-            } else {
-                return tail.template get<INDEX>();
-            }
+        return (INDEX == index());
+    }
+
+    template<size_t INDEX>
+    constexpr void set (typename MapType::template ItemAt<TypeIndex<INDEX>>::type value)
+    {
+        field.get<INDEX>() = value;
+        index_value = INDEX;
+    }
+
+    template<size_t INDEX>
+    constexpr auto& unsafe_get () const
+    {
+        return field.get<INDEX>();
+    }
+
+    template<size_t INDEX>
+    constexpr auto& try_get () const
+    {
+        if (holds<INDEX>()) {
+            return &field.get<INDEX>();
         } else {
-            static_assert(AlwaysFalse<TypeIndex<INDEX>>::VALUE,"Index does not exist in type array.");
-            return UndefinedType::value;
+            return nullptr;
         }
     }
+
+    private:
+
+    template<typename VISITOR,size_t INDEX=0>
+    static constexpr bool visitor_is_valid()
+    {
+        if constexpr (ITEM_COUNT == 0) {
+            return false;
+        } else if constexpr (INDEX == (ITEM_COUNT-1)) {
+            return true;
+        } else {
+            constexpr bool match = std::is_same<
+                typename std::result_of<VISITOR(typename ItemAt<INDEX>::type)>::type,
+                typename std::result_of<VISITOR(typename ItemAt<INDEX+1>::type)>::type
+            >::value;
+            if constexpr (match) {
+                return visitor_is_valid<VISITOR,INDEX+1>();
+            } else {
+                return false;
+            }
+        }
+    }
+
+
+    template<typename VISITOR, size_t INDEX=0>
+    inline constexpr decltype(auto) visit_recurse(VISITOR &&visitor)
+    {
+        if (INDEX == index()) {
+            return visitor(unsafe_get<INDEX>());
+        } else {
+            if constexpr (INDEX == (ITEM_COUNT-1)) {
+                return visitor(unsafe_get<INDEX>());
+            } else {
+                return visit_recurse<VISITOR,INDEX+1>(visitor);
+            }
+        }
+    }
+
+    public:
+
+    template<typename VISITOR>
+    constexpr decltype(auto) visit(VISITOR &&visitor)
+    {
+        static_assert(
+            visitor_is_valid<VISITOR>(),
+            ASSERT_TEXT("Visitor's call implementations should return the same type for all items.")
+        );
+        return visit_recurse(visitor);
+    }
+
 };
 
 
-#endif // HARMONIZE_CONTAINER_UNION
+#endif // HARMONIZE_CONTAINER_VARIANT
 

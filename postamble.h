@@ -1,0 +1,2 @@
+#undef COLOR_ASSERTS
+#undef ASSERT_TEXT

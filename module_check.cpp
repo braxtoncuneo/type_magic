@@ -71,6 +71,41 @@ namespace check {
         >::value);
     }
 
+
+    void set_union_check() {
+        info("Checking SetUnion");
+        typedef SetUnion<TypeSet<int,float,bool>> SA;
+        SA set_union;
+        set_union.get<int>() = 123;
+        assert(set_union.get<int>() == 123);
+        set_union.get<float>() = 4.56f;
+        assert(set_union.get<float>() == 4.56f);
+        set_union.get<bool>() = true;
+        assert(set_union.get<bool>() == true);
+    };
+
+
+    struct TruthyVisitor {
+        template<typename T> bool operator()(T value) { return (bool) value; }
+    };
+
+    void array_variant_check() {
+        info("Checking ArrayVariant");
+        typedef ArrayVariant<TypeArray<int,float,bool>> AV;
+        AV array_variant;
+        assert(!array_variant.holds<0>());
+        assert(!array_variant.valid());
+        array_variant.set<0>(123);
+        assert(array_variant.valid());
+        assert(array_variant.unsafe_get<0>() == 123);
+        assert(array_variant.holds<0>());
+        assert(!array_variant.holds<1>());
+
+        assert(array_variant.visit(TruthyVisitor{}));
+
+
+    };
+
     class CheckLaunch {
         static CheckLaunch launcher;
         public:
@@ -81,6 +116,8 @@ namespace check {
             union_check();
             intersect_check();
             difference_check();
+            set_union_check();
+            array_variant_check();
         }
     };
     CheckLaunch CheckLaunch::launcher = CheckLaunch();

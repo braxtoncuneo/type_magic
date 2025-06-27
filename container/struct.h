@@ -19,7 +19,34 @@ struct MapStruct <TypeMap<ITEMS...>> {
     template<typename KEY>
     constexpr auto& get ()
     {
-        static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type map.");
+        static_assert(
+            AlwaysFalse<KEY>::VALUE,
+            "Key does not exist in type map."
+        );
+    }
+};
+
+
+template <typename HEAD>
+struct MapStruct <TypeMap<HEAD>> {
+
+    typedef TypeMap<HEAD> MapType;
+    typedef typename MapType::Type Type;
+
+    Type data;
+
+    template<typename KEY>
+    constexpr auto& get ()
+    {
+        if constexpr (MapType::template has_key<KEY>()) {
+            return data;
+        } else {
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Key does not exist in type map."
+            );
+            return UndefinedType::value;
+        }
     }
 };
 
@@ -44,7 +71,10 @@ struct MapStruct <TypeMap<HEAD,TAIL...>> {
                 return tail.template get<KEY>();
             }
         } else {
-            static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type map.");
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Key does not exist in type map."
+            );
             return UndefinedType::value;
         }
     }
@@ -63,7 +93,34 @@ struct SetStruct <TypeSet<ITEMS...>> {
     template<typename KEY>
     constexpr auto& get ()
     {
-        static_assert(AlwaysFalse<KEY>::VALUE,"Key does not exist in type set.");
+        static_assert(
+            AlwaysFalse<KEY>::VALUE,
+            "Key does not exist in type set."
+        );
+    }
+};
+
+
+template <typename HEAD>
+struct SetStruct <TypeSet<HEAD>> {
+
+    typedef typename TypeSet<HEAD>::MapType MapType;
+    typedef typename MapType::Type Type;
+
+    Type data;
+
+    template<typename KEY>
+    constexpr auto& get ()
+    {
+        if constexpr (MapType::template has_key<KEY>()) {
+            return data;
+        } else {
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Item does not exist in type set."
+            );
+            return UndefinedType::value;
+        }
     }
 };
 
@@ -88,7 +145,10 @@ struct SetStruct <TypeSet<HEAD,TAIL...>> {
                 return tail.template get<KEY>();
             }
         } else {
-            static_assert(AlwaysFalse<KEY>::VALUE,"Item does not exist in type set.");
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Item does not exist in type set."
+            );
             return UndefinedType::value;
         }
     }
@@ -106,7 +166,34 @@ struct ArrayStruct <TypeArray<ITEMS...>> {
     template<size_t INDEX>
     constexpr auto& get ()
     {
-        static_assert(AlwaysFalse<TypeIndex<INDEX>>::VALUE,"Index does not exist in type array.");
+        static_assert(
+            AlwaysFalse<TypeIndex<INDEX>>::VALUE,
+            "Index does not exist in type array."
+        );
+    }
+};
+
+
+template <typename HEAD>
+struct ArrayStruct <TypeArray<HEAD>> {
+
+    typedef typename TypeArray<HEAD>::MapType MapType;
+    typedef typename MapType::Type Type;
+
+    Type data;
+
+    template<size_t INDEX>
+    constexpr auto& get ()
+    {
+        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
+            return data;
+        } else {
+            static_assert(
+                AlwaysFalse<TypeIndex<INDEX>>::VALUE,
+                "Index does not exist in type array."
+            );
+            return UndefinedType::value;
+        }
     }
 };
 
@@ -131,7 +218,10 @@ struct ArrayStruct <TypeArray<HEAD,TAIL...>> {
                 return tail.template get<INDEX>();
             }
         } else {
-            static_assert(AlwaysFalse<TypeIndex<INDEX>>::VALUE,"Index does not exist in type array.");
+            static_assert(
+                AlwaysFalse<TypeIndex<INDEX>>::VALUE,
+                "Index does not exist in type array."
+            );
             return UndefinedType::value;
         }
     }

@@ -1,6 +1,8 @@
 #ifndef HARMONIZE_CONTAINER_TYPE
 #define HARMONIZE_CONTAINER_TYPE
 
+#include "undef.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 // Forward-declare templates
 ///////////////////////////////////////////////////////////////////////////////
@@ -61,7 +63,7 @@ struct Binding
 template<typename T>
 struct AlwaysFalse
 {
-    static constexpr bool VALUE = false;
+    static constexpr bool value = false;
 };
 
 
@@ -69,6 +71,9 @@ struct AlwaysFalse
 template<typename... BINDINGS>
 struct TypeMap
 {
+
+    static constexpr size_t ITEM_COUNT = 0;
+
     template<typename KEY>
     static constexpr bool has_key()
     {
@@ -82,7 +87,11 @@ struct TypeMap
 
     template <typename KEY>
     struct ItemAt {
-        static_assert(AlwaysFalse<KEY>::value,"Key does not exist in type map.");
+        static_assert(
+            AlwaysFalse<KEY>::value,
+            ASSERT_TEXT("Key does not exist in type map.")
+        );
+        typedef UndefinedType type;
     };
 
     template <typename OTHER>
@@ -134,6 +143,8 @@ struct TypeMap <HEAD,TAIL...>
     typedef typename HEAD::Key  Key;
     typedef typename HEAD::Type Type;
 
+    static constexpr size_t ITEM_COUNT = Tail::ITEM_COUNT + 1;
+
     template<typename KEY>
     static constexpr bool has_key()
     {
@@ -154,26 +165,26 @@ struct TypeMap <HEAD,TAIL...>
     }
 
     static_assert(
-        !TypeMap<HEAD,TAIL...>::has_duplicate_key(),
+        (!TypeMap<HEAD,TAIL...>::has_duplicate_key()),
         "TypeMap cannot contain duplicate key types."
     );
 
 
-    template <typename KEY,typename ENABLE=void>
+    template <typename KEY_QUERY,typename ENABLE=void>
     struct ItemAt;
 
-    template <typename KEY>
+    template <typename KEY_QUERY>
     struct ItemAt <
-        KEY,
-        typename std::enable_if<!(std::is_same<Key,KEY>::value)>::type
+        KEY_QUERY,
+        typename std::enable_if<!(std::is_same<Key,KEY_QUERY>::value)>::type
     > {
-        typedef typename Tail::template ItemAt<Key>::type type;
+        typedef typename Tail::template ItemAt<KEY_QUERY>::type type;
     };
 
-    template <typename KEY>
+    template <typename KEY_QUERY>
     struct ItemAt <
-        KEY,
-        typename std::enable_if<std::is_same<Key,KEY>::value>::type
+        KEY_QUERY,
+        typename std::enable_if<std::is_same<Key,KEY_QUERY>::value>::type
     > {
         typedef Type type;
     };
@@ -280,7 +291,22 @@ struct TypeIndex {
 template<typename... ELEMENTS>
 struct TypeArray
 {
-    typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
+
+    template<size_t INDEX, typename... ELEMS>
+    struct TypeMapGenerator;
+
+    template<size_t INDEX>
+    struct TypeMapGenerator <INDEX> {
+        typedef TypeMap<> type;
+    };
+
+    template<size_t INDEX, typename HEAD, typename... TAIL>
+    struct TypeMapGenerator <INDEX,HEAD,TAIL...> {
+        typedef typename TypeMapGenerator<INDEX+1,TAIL...>::type TailMap;
+        typedef typename TypeMap<Binding<TypeIndex<INDEX>,HEAD>>::template Union<TailMap>::type type;
+    };
+
+    typedef typename TypeMapGenerator<0,ELEMENTS...>::type MapType;
 
     template<size_t INDEX>
     static constexpr bool has_index()

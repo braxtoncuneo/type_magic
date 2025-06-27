@@ -1,6 +1,10 @@
 #include <type_traits>
 #include <cassert>
 #include <stdexcept>
+
+#include "preamble.h"
+
+
 #include "sanity_check.cpp"
 
 
@@ -36,6 +40,7 @@ struct ExampleComponent
 
 };
 
+#include "postamble.h"
 
 
 
