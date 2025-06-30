@@ -8,18 +8,7 @@
 #include "sanity_check.cpp"
 
 
-#ifdef HARMONIZE_RUNTIME_CORRECTNESS_CHECK
-constexpr bool RUNTIME_CORRECTNESS_CHECK = HARMONIZE_RUNTIME_CORRECTNESS_CHECK;
-#else
-constexpr bool RUNTIME_CORRECTNESS_CHECK = false;
-#endif
-
-
-#ifdef HARMONIZE_REORDER_MEMBERS
-constexpr bool REORDER_MEMBERS = HARMONIZE_REORDER_MEMBERS;
-#else
-constexpr bool REORDER_MEMBERS = true;
-#endif
+#include "config.h"
 
 
 #include "container/mod.h"

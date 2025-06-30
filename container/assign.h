@@ -1,6 +1,9 @@
 #ifndef HARMONIZE_CONTAINER_ASSIGN
 #define HARMONIZE_CONTAINER_ASSIGN
 
+
+namespace container::assign {
+
 template<typename TYPE>
 struct SurjectiveAssign {
     TYPE &value;
@@ -16,5 +19,6 @@ struct BijectiveAssign {
     TYPE &value;
 };
 
+}
 
 #endif

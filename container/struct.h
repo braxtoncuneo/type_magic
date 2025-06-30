@@ -1,12 +1,12 @@
 #ifndef HARMONIZE_CONTAINER_STRUCT
 #define HARMONIZE_CONTAINER_STRUCT
 
-#include "type.h"
 #include "undef.h"
+#include "type.h"
 #include "assign.h"
 
 
-
+namespace container {
 
 ///////////////////////////////////////////////////////////////////////////////
 // MapStruct
@@ -30,15 +30,15 @@ struct MapStruct <TypeMap<ITEMS...>> {
 template <typename HEAD>
 struct MapStruct <TypeMap<HEAD>> {
 
-    typedef TypeMap<HEAD> MapType;
-    typedef typename MapType::Type Type;
+    typedef typename TypeMap<HEAD>::DefaultStructOrder::type MapType;
+    typedef typename MapType::HeadItemType HeadItemType;
 
-    Type data;
+    HeadItemType data;
 
     template<typename KEY>
     constexpr auto& get ()
     {
-        if constexpr (MapType::template has_key<KEY>()) {
+        if constexpr (MapType:: template has_key<KEY>()) {
             return data;
         } else {
             static_assert(
@@ -54,18 +54,18 @@ struct MapStruct <TypeMap<HEAD>> {
 template <typename HEAD, typename... TAIL>
 struct MapStruct <TypeMap<HEAD,TAIL...>> {
 
-    typedef TypeMap<HEAD,TAIL...> MapType;
-    typedef typename MapType::Type Type;
-    typedef MapStruct<TypeMap<TAIL...>> Tail;
+    typedef typename TypeMap<HEAD,TAIL...>::DefaultStructOrder::type MapType;
+    typedef typename MapType::HeadItemType HeadItemType;
+    typedef MapStruct<TypeMap<TAIL...>> TailType;
 
-    Type data;
-    Tail tail;
+    HeadItemType data;
+    TailType tail;
 
     template<typename KEY>
     constexpr auto& get ()
     {
         if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
+            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
                 return data;
             } else {
                 return tail.template get<KEY>();
@@ -105,9 +105,9 @@ template <typename HEAD>
 struct SetStruct <TypeSet<HEAD>> {
 
     typedef typename TypeSet<HEAD>::MapType MapType;
-    typedef typename MapType::Type Type;
+    typedef typename MapType::HeadItemType HeadItemType;
 
-    Type data;
+    HeadItemType data;
 
     template<typename KEY>
     constexpr auto& get ()
@@ -129,17 +129,17 @@ template <typename HEAD, typename... TAIL>
 struct SetStruct <TypeSet<HEAD,TAIL...>> {
 
     typedef typename TypeSet<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::Type Type;
-    typedef SetStruct<TypeMap<TAIL...>> Tail;
+    typedef typename MapType::HeadItemType HeadItemType;
+    typedef SetStruct<TypeMap<TAIL...>> TailType;
 
-    Type data;
-    Tail tail;
+    HeadItemType data;
+    TailType tail;
 
     template<typename KEY>
     constexpr auto& get ()
     {
         if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
+            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
                 return data;
             } else {
                 return tail.template get<KEY>();
@@ -178,9 +178,9 @@ template <typename HEAD>
 struct ArrayStruct <TypeArray<HEAD>> {
 
     typedef typename TypeArray<HEAD>::MapType MapType;
-    typedef typename MapType::Type Type;
+    typedef typename MapType::HeadItemType HeadItemType;
 
-    Type data;
+    HeadItemType data;
 
     template<size_t INDEX>
     constexpr auto& get ()
@@ -202,17 +202,17 @@ template <typename HEAD, typename... TAIL>
 struct ArrayStruct <TypeArray<HEAD,TAIL...>> {
 
     typedef typename TypeArray<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::Type Type;
-    typedef ArrayStruct<TypeArray<TAIL...>> Tail;
+    typedef typename MapType::HeadItemType HeadItemType;
+    typedef ArrayStruct<TypeArray<TAIL...>> TailType;
 
-    Type data;
-    Tail tail;
+    HeadItemType data;
+    TailType tail;
 
     template<size_t INDEX>
     constexpr auto& get ()
     {
         if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::Key>::value) {
+            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::HeadKeyType>::value) {
                 return data;
             } else {
                 return tail.template get<INDEX>();
@@ -226,6 +226,9 @@ struct ArrayStruct <TypeArray<HEAD,TAIL...>> {
         }
     }
 };
+
+
+}
 
 
 #endif // HARMONIZE_CONTAINER_STRUCT

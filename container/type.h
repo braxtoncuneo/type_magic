@@ -3,6 +3,8 @@
 
 #include "undef.h"
 
+namespace container {
+
 ///////////////////////////////////////////////////////////////////////////////
 // Forward-declare templates
 ///////////////////////////////////////////////////////////////////////////////
@@ -52,11 +54,11 @@ struct UnMeta <Meta<TEMPLATE>,ARG>
 };
 
 
-template<typename KEY, typename TYPE>
+template<typename KEY, typename ITEM>
 struct Binding
 {
-    typedef KEY  Key;
-    typedef TYPE Type;
+    typedef KEY  KeyType;
+    typedef ITEM ItemType;
 };
 
 
@@ -127,9 +129,29 @@ struct TypeMap
         typedef TypeMap<> type;
     };
 
+    template<typename PHONEY=void, typename ENABLE=void>
+    struct SortHelper {
+        typedef Binding<UndefinedType,char> BiggestItem;
+        typedef TypeMap<> Remainder;
+        typedef TypeMap<> RemainderSorted;
+        typedef TypeMap<> type;
+    };
+
     struct Sort {
         typedef TypeMap<> type;
     };
+
+    struct DefaultStructOrder {
+        typedef TypeMap<> type;
+    };
+
+    static void structure_print_recurse() {}
+
+    static void print_items() {
+        printf("{\n");
+        structure_print_recurse();
+        printf("}\n");
+    }
 
 };
 
@@ -138,29 +160,29 @@ template<typename HEAD, typename... TAIL>
 struct TypeMap <HEAD,TAIL...>
 {
 
-    typedef TypeMap<HEAD,TAIL...> Self;
-    typedef TypeMap<TAIL...> Tail;
-    typedef typename HEAD::Key  Key;
-    typedef typename HEAD::Type Type;
+    typedef TypeMap<HEAD,TAIL...> SelfType;
+    typedef TypeMap<TAIL...> TailType;
+    typedef typename HEAD::KeyType  HeadKeyType;
+    typedef typename HEAD::ItemType HeadItemType;
 
-    static constexpr size_t ITEM_COUNT = Tail::ITEM_COUNT + 1;
+    static constexpr size_t ITEM_COUNT = TailType::ITEM_COUNT + 1;
 
     template<typename KEY>
     static constexpr bool has_key()
     {
-        if constexpr (std::is_same<KEY,Key>::value) {
+        if constexpr (std::is_same<KEY,HeadKeyType>::value) {
             return true;
         } else {
-            return Tail::template has_key<KEY>();
+            return TailType::template has_key<KEY>();
         }
     }
 
     static constexpr bool has_duplicate_key()
     {
-        if constexpr (Tail::template has_key<Key>()) {
+        if constexpr (TailType::template has_key<HeadKeyType>()) {
             return true;
         } else {
-            return Tail::has_duplicate_key();
+            return TailType::has_duplicate_key();
         }
     }
 
@@ -176,17 +198,17 @@ struct TypeMap <HEAD,TAIL...>
     template <typename KEY_QUERY>
     struct ItemAt <
         KEY_QUERY,
-        typename std::enable_if<!(std::is_same<Key,KEY_QUERY>::value)>::type
+        typename std::enable_if<!(std::is_same<HeadKeyType,KEY_QUERY>::value)>::type
     > {
-        typedef typename Tail::template ItemAt<KEY_QUERY>::type type;
+        typedef typename TailType::template ItemAt<KEY_QUERY>::type type;
     };
 
     template <typename KEY_QUERY>
     struct ItemAt <
         KEY_QUERY,
-        typename std::enable_if<std::is_same<Key,KEY_QUERY>::value>::type
+        typename std::enable_if<std::is_same<HeadKeyType,KEY_QUERY>::value>::type
     > {
-        typedef Type type;
+        typedef HeadItemType type;
     };
 
 
@@ -196,17 +218,17 @@ struct TypeMap <HEAD,TAIL...>
     template <typename... ITEMS>
     struct Union <
         TypeMap<ITEMS...>,
-        typename std::enable_if<TypeMap<ITEMS...>::template has_key<typename HEAD::Key>()>::type
+        typename std::enable_if<TypeMap<ITEMS...>::template has_key<HeadKeyType>()>::type
     > {
-        typedef typename Tail::template Union<TypeMap<ITEMS...>>::type type;
+        typedef typename TailType::template Union<TypeMap<ITEMS...>>::type type;
     };
 
     template <typename... ITEMS>
     struct Union <
         TypeMap<ITEMS...>,
-        typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<typename HEAD::Key>())>::type
+        typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<HeadKeyType>())>::type
     > {
-        typedef typename Tail::template Union<TypeMap<HEAD,ITEMS...>>::type type;
+        typedef typename TailType::template Union<TypeMap<HEAD,ITEMS...>>::type type;
     };
 
     template <template<typename> typename SELECTOR,typename ENABLE=void>
@@ -217,7 +239,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<SELECTOR<HEAD>::value>::type
     > {
-        typedef typename TypeMap<HEAD>::Union<typename Tail::Filter<SELECTOR>::type>::type type;
+        typedef typename TypeMap<HEAD>::Union<typename TailType::Filter<SELECTOR>::type>::type type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -225,7 +247,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<!(SELECTOR<HEAD>::value)>::type
     > {
-        typedef typename Tail::Filter<SELECTOR>::type type;
+        typedef typename TailType::Filter<SELECTOR>::type type;
     };
 
     template <typename OTHER>
@@ -234,14 +256,14 @@ struct TypeMap <HEAD,TAIL...>
     template <typename... ITEMS>
     struct Intersection <TypeMap<ITEMS...>> {
 
-        typedef TypeMap<ITEMS...> Other;
+        typedef TypeMap<ITEMS...> OtherType;
 
         template<typename OTHER_ITEM>
         struct OtherHasKey {
-            static constexpr bool value = Other::template has_key<typename OTHER_ITEM::Key>();
+            static constexpr bool value = OtherType::template has_key<typename OTHER_ITEM::KeyType>();
         };
 
-        typedef typename Self::template Filter<OtherHasKey>::type type;
+        typedef typename SelfType::template Filter<OtherHasKey>::type type;
     };
 
     template <typename OTHER>
@@ -250,19 +272,85 @@ struct TypeMap <HEAD,TAIL...>
     template <typename... ITEMS>
     struct Difference <TypeMap<ITEMS...>> {
 
-        typedef TypeMap<ITEMS...> Other;
+        typedef TypeMap<ITEMS...> OtherType;
 
         template<typename OTHER_ITEM>
         struct OtherDoesNotHaveKey {
-            static constexpr bool value = !Other::template has_key<typename OTHER_ITEM::Key>();
+            static constexpr bool value = !OtherType::template has_key<typename OTHER_ITEM::KeyType>();
         };
 
-        typedef typename Self::template Filter<OtherDoesNotHaveKey>::type type;
+        typedef typename SelfType::template Filter<OtherDoesNotHaveKey>::type type;
     };
 
     struct Invert {
-        typedef typename TypeMap<Type,Key>::template Union<typename Tail::Invert>::type type;
+        typedef typename TypeMap<HeadItemType,HeadKeyType>::template Union<typename TailType::Invert>::type type;
     };
+
+    template <typename PHONEY=void, typename ENABLE=void>
+    struct SortHelper;
+
+    template <typename PHONEY>
+    struct SortHelper<
+        PHONEY,
+        typename std::enable_if<sizeof(HeadItemType)>=sizeof(typename TailType::template SortHelper<>::BiggestItem::ItemType),PHONEY>::type
+    > {
+        typedef HEAD     BiggestItem;
+        typedef TailType Remainder;
+        typedef typename Remainder::Sort::type RemainderSorted;
+        typedef typename TypeMap<BiggestItem>::template Union<RemainderSorted>::type type;
+    };
+
+    template <typename PHONEY>
+    struct SortHelper<
+        PHONEY,
+        typename std::enable_if<sizeof(HeadItemType)<sizeof(typename TailType::template SortHelper<>::BiggestItem::ItemType),PHONEY>::type
+    > {
+        typedef typename TailType::template SortHelper<>::BiggestItem BiggestItem;
+        typedef typename TailType::template SortHelper<>::Remainder   TailRemainder;
+        typedef typename TypeMap<HEAD>::template Union<TailRemainder>::type Remainder;
+        typedef typename Remainder::Sort::type RemainderSorted;
+        typedef typename TypeMap<BiggestItem>::template Union<RemainderSorted>::type type;
+    };
+
+    struct Sort {
+        typedef typename SortHelper<>::type type;
+    };
+
+
+    template <typename PHONEY=void, typename ENABLE=void>
+    struct DefaultStructOrderHelper;
+
+    template <typename PHONEY>
+    struct DefaultStructOrderHelper<
+        PHONEY,
+        typename std::enable_if<config::REORDER_STRUCT_MEMBERS,PHONEY>::type
+    > {
+        typedef typename Sort::type type;
+    };
+
+    template <typename PHONEY>
+    struct DefaultStructOrderHelper<
+        PHONEY,
+        typename std::enable_if<(!config::REORDER_STRUCT_MEMBERS),PHONEY>::type
+    > {
+        typedef TypeMap<HEAD,TAIL...> type;
+    };
+
+    struct DefaultStructOrder {
+        typedef typename DefaultStructOrderHelper<>::type type;
+    };
+
+    static void structure_print_recurse() {
+        printf("\t%s : %s;\n",typeid(HeadKeyType).name(),typeid(HeadItemType).name());
+        TailType::structure_print_recurse();
+    }
+
+    static void print_items() {
+        printf("{\n");
+        structure_print_recurse();
+        printf("}\n");
+    }
+
 
 };
 
@@ -315,6 +403,9 @@ struct TypeArray
     }
 
 };
+
+
+}
 
 
 #endif // HARMONIZE_CONTAINER_TYPE

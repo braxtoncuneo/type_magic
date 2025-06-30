@@ -1,5 +1,5 @@
-#ifndef HARMONIZE_CONTAINER_FUNC
-#define HARMONIZE_CONTAINER_FUNC
+#ifndef HARMONIZE_CONTAINER_PROMISE
+#define HARMONIZE_CONTAINER_PROMISE
 
 #include "type.h"
 
@@ -12,7 +12,7 @@ namespace container {
 template <typename MAP> struct FuncMap;
 
 template <typename... ITEMS>
-struct FuncMap <TypeMap<ITEMS...>> {
+struct PromiseMap <TypeMap<ITEMS...>> {
     template<typename KEY,typename... ARGS>
     decltype(auto) func(ARGS... args)
     {
@@ -28,7 +28,7 @@ struct FuncMap <TypeMap<ITEMS...>> {
 template <typename SET> struct FuncSet;
 
 template <typename... ITEMS>
-struct FuncSet <TypeSet<ITEMS...>> {
+struct PromiseSet <TypeSet<ITEMS...>> {
     template<typename ITEM,typename... ARGS>
     decltype(auto) func(ARGS... args)
     {
@@ -44,7 +44,7 @@ struct FuncSet <TypeSet<ITEMS...>> {
 template <typename ARRAY> struct FuncArray;
 
 template <typename... ITEMS>
-struct FuncArray <TypeArray<ITEMS...>> {
+struct PromiseArray <TypeArray<ITEMS...>> {
     template<size_t INDEX,typename... ARGS>
     decltype(auto) func(ARGS... args)
     {
@@ -55,5 +55,4 @@ struct FuncArray <TypeArray<ITEMS...>> {
 }
 
 
-#endif // HARMONIZE_CONTAINER_FUNC
-
+#endif // HARMONIZE_CONTAINER_PROMISE

@@ -5,6 +5,9 @@
 #include "undef.h"
 #include "assign.h"
 
+
+namespace container {
+
 ///////////////////////////////////////////////////////////////////////////////
 // MapVariant
 ///////////////////////////////////////////////////////////////////////////////
@@ -68,20 +71,20 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
     }
 
     template<size_t INDEX>
-    constexpr void set (typename MapType::template ItemAt<TypeIndex<INDEX>>::type value)
+    inline void set (typename MapType::template ItemAt<TypeIndex<INDEX>>::type value)
     {
         field.get<INDEX>() = value;
         index_value = INDEX;
     }
 
     template<size_t INDEX>
-    constexpr auto& unsafe_get () const
+    inline auto& unsafe_get () const
     {
         return field.get<INDEX>();
     }
 
     template<size_t INDEX>
-    constexpr auto& try_get () const
+    inline auto& try_get () const
     {
         if (holds<INDEX>()) {
             return &field.get<INDEX>();
@@ -130,7 +133,7 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
     public:
 
     template<typename VISITOR>
-    constexpr decltype(auto) visit(VISITOR &&visitor)
+    inline decltype(auto) visit(VISITOR &&visitor)
     {
         static_assert(
             visitor_is_valid<VISITOR>(),
@@ -140,6 +143,9 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
     }
 
 };
+
+
+}
 
 
 #endif // HARMONIZE_CONTAINER_VARIANT

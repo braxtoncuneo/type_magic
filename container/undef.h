@@ -8,7 +8,7 @@ struct UndefinedType {
     static UndefinedType value;
 
     template <typename TYPE>
-    operator TYPE() {
+    operator TYPE() const {
         throw std::runtime_error("Attempted to cast value of undefined type.");
     }
 };

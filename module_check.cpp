@@ -23,6 +23,10 @@ namespace check {
     }
     */
 
+namespace container {
+
+    using namespace ::container;
+
     void map_check() {
         info("Checking MapStruct");
         MapStruct<TypeMap<
@@ -102,14 +106,31 @@ namespace check {
         assert(!array_variant.holds<1>());
 
         assert(array_variant.visit(TruthyVisitor{}));
-
-
     };
+
+    void order_check() {
+        typedef TypeMap<
+            Binding<int,bool>,
+            Binding<double,char>,
+            Binding<float,float>,
+            Binding<char,double>
+        > M;
+        typedef TypeMap<
+            Binding<char,double>,
+            Binding<float,float>,
+            Binding<int,bool>,
+            Binding<double,char>
+        > Q;
+        static_assert(std::is_same<MapStruct<M>::MapType,MapStruct<Q>::MapType>::value);
+    }
+
+}
 
     class CheckLaunch {
         static CheckLaunch launcher;
         public:
         CheckLaunch() {
+            using namespace container;
             info("Running checks...");
             //set_check();
             map_check();
@@ -118,6 +139,7 @@ namespace check {
             difference_check();
             set_union_check();
             array_variant_check();
+            order_check();
         }
     };
     CheckLaunch CheckLaunch::launcher = CheckLaunch();
