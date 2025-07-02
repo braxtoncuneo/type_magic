@@ -43,14 +43,16 @@ union MapUnion <TypeMap<HEAD,TAIL...>> {
     typedef typename MapType::HeadItemType HeadItemType;
     typedef MapUnion<TypeMap<TAIL...>> TailType;
 
+    private:
     HeadItemType data;
     TailType tail;
+    public:
 
     template<typename KEY>
     constexpr auto& get () const
     {
         if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
+            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
                 return data;
             } else {
                 return tail.template get<KEY>();
@@ -68,7 +70,7 @@ union MapUnion <TypeMap<HEAD,TAIL...>> {
     constexpr auto& get ()
     {
         if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::Key>::value) {
+            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
                 return data;
             } else {
                 return tail.template get<KEY>();
@@ -88,152 +90,56 @@ union MapUnion <TypeMap<HEAD,TAIL...>> {
 // SetUnion
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename SET> union SetUnion;
+template <typename SET> struct SetUnion;
 
 template <typename... ITEMS>
-union SetUnion <TypeSet<ITEMS...>> {
-    template<typename KEY>
-    constexpr auto& get () const
-    {
-        static_assert(
-            AlwaysFalse<KEY>::value,
-            ASSERT_TEXT("Key does not exist in type set.")
-        );
-    }
+struct SetUnion <TypeSet<ITEMS...>> {
+
+    typedef typename TypeSet<ITEMS...>::MapType MapType;
+
+    MapUnion<MapType> map;
 
     template<typename KEY>
     constexpr auto& get ()
     {
-        static_assert(
-            AlwaysFalse<KEY>::value,
-            ASSERT_TEXT("Key does not exist in type set.")
-        );
+        return map.template get<KEY>();
     }
-};
-
-
-template <typename HEAD, typename... TAIL>
-union SetUnion <TypeSet<HEAD,TAIL...>> {
-
-    typedef typename TypeSet<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-    typedef SetUnion<TypeSet<TAIL...>> TailType;
-
-    HeadItemType data;
-    TailType tail;
 
     template<typename KEY>
     constexpr auto& get () const
     {
-        if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<KEY>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<KEY>::value,
-                ASSERT_TEXT("Item does not exist in type set.")
-            );
-            return UndefinedType::value;
-        }
-    }
-
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<KEY>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<KEY>::value,
-                ASSERT_TEXT("Item does not exist in type set.")
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<KEY>();
     }
 };
-
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // ArrayUnion
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename SET> union ArrayUnion;
+template <typename SET> struct ArrayUnion;
 
 template <typename... ITEMS>
-union ArrayUnion <TypeArray<ITEMS...>> {
-    template<size_t INDEX>
-    constexpr auto& get () const
-    {
-        static_assert(
-            AlwaysFalse<TypeIndex<INDEX>>::value,
-            ASSERT_TEXT("Index does not exist in type array.")
-        );
-    }
-    template<size_t INDEX>
-    constexpr auto& get ()
-    {
-        static_assert(
-            AlwaysFalse<TypeIndex<INDEX>>::value,
-            ASSERT_TEXT("Index does not exist in type array.")
-        );
-    }
-};
+struct ArrayUnion <TypeArray<ITEMS...>> {
 
+    typedef typename TypeArray<ITEMS...>::MapType MapType;
 
-template <typename HEAD, typename... TAIL>
-union ArrayUnion <TypeArray<HEAD,TAIL...>> {
+    MapUnion<MapType> map;
 
-    typedef typename TypeArray<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-    typedef ArrayUnion<TypeArray<TAIL...>> TailType;
-
-    HeadItemType data;
-    TailType tail;
 
     template<size_t INDEX>
     constexpr auto& get () const
     {
-        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<INDEX-1>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<TypeIndex<INDEX>>::value,
-                ASSERT_TEXT("Index does not exist in type array.")
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<TypeIndex<INDEX>>();
     }
 
     template<size_t INDEX>
     constexpr auto& get ()
     {
-        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<INDEX-1>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<TypeIndex<INDEX>>::value,
-                ASSERT_TEXT("Index does not exist in type array.")
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<TypeIndex<INDEX>>();
     }
 };
+
 
 }
 

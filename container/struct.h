@@ -24,6 +24,20 @@ struct MapStruct <TypeMap<ITEMS...>> {
             "Key does not exist in type map."
         );
     }
+
+    template<typename KEY>
+    constexpr auto& get () const
+    {
+        static_assert(
+            AlwaysFalse<KEY>::VALUE,
+            "Key does not exist in type map."
+        );
+    }
+
+    MapStruct() = default;
+    MapStruct(MapStruct &other) = default;
+    MapStruct(MapStruct &&other) = default;
+
 };
 
 
@@ -33,10 +47,34 @@ struct MapStruct <TypeMap<HEAD>> {
     typedef typename TypeMap<HEAD>::DefaultStructOrder::type MapType;
     typedef typename MapType::HeadItemType HeadItemType;
 
+    private:
     HeadItemType data;
+    public:
+
+    MapStruct() = default;
+    MapStruct(MapStruct &other) = default;
+    MapStruct(MapStruct &&other) = default;
+
+    MapStruct (HeadItemType data)
+        : data(data)
+    {}
 
     template<typename KEY>
     constexpr auto& get ()
+    {
+        if constexpr (MapType:: template has_key<KEY>()) {
+            return data;
+        } else {
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Key does not exist in type map."
+            );
+            return UndefinedType::value;
+        }
+    }
+
+    template<typename KEY>
+    constexpr auto& get () const
     {
         if constexpr (MapType:: template has_key<KEY>()) {
             return data;
@@ -58,11 +96,41 @@ struct MapStruct <TypeMap<HEAD,TAIL...>> {
     typedef typename MapType::HeadItemType HeadItemType;
     typedef MapStruct<TypeMap<TAIL...>> TailType;
 
+    private:
     HeadItemType data;
     TailType tail;
+    public:
+
+    MapStruct() = default;
+    MapStruct(MapStruct &other) = default;
+    MapStruct(MapStruct &&other) = default;
+
+    template<typename... TAIL_ITEM_TYPES>
+    MapStruct (HeadItemType data, TAIL_ITEM_TYPES... tail_items)
+        : data(data)
+        , tail(tail_items...)
+    {}
 
     template<typename KEY>
     constexpr auto& get ()
+    {
+        if constexpr (MapType::template has_key<KEY>()) {
+            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
+                return data;
+            } else {
+                return tail.template get<KEY>();
+            }
+        } else {
+            static_assert(
+                AlwaysFalse<KEY>::VALUE,
+                "Key does not exist in type map."
+            );
+            return UndefinedType::value;
+        }
+    }
+
+    template<typename KEY>
+    constexpr auto& get () const
     {
         if constexpr (MapType::template has_key<KEY>()) {
             if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
@@ -90,67 +158,23 @@ template <typename SET> struct SetStruct;
 
 template <typename... ITEMS>
 struct SetStruct <TypeSet<ITEMS...>> {
+
+    typedef typename TypeSet<ITEMS...>::MapType MapType;
+
+    private:
+    MapStruct<MapType> map;
+    public:
+
     template<typename KEY>
     constexpr auto& get ()
     {
-        static_assert(
-            AlwaysFalse<KEY>::VALUE,
-            "Key does not exist in type set."
-        );
+        return map.template get<KEY>();
     }
-};
-
-
-template <typename HEAD>
-struct SetStruct <TypeSet<HEAD>> {
-
-    typedef typename TypeSet<HEAD>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-
-    HeadItemType data;
 
     template<typename KEY>
-    constexpr auto& get ()
+    constexpr auto& get () const
     {
-        if constexpr (MapType::template has_key<KEY>()) {
-            return data;
-        } else {
-            static_assert(
-                AlwaysFalse<KEY>::VALUE,
-                "Item does not exist in type set."
-            );
-            return UndefinedType::value;
-        }
-    }
-};
-
-
-template <typename HEAD, typename... TAIL>
-struct SetStruct <TypeSet<HEAD,TAIL...>> {
-
-    typedef typename TypeSet<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-    typedef SetStruct<TypeMap<TAIL...>> TailType;
-
-    HeadItemType data;
-    TailType tail;
-
-    template<typename KEY>
-    constexpr auto& get ()
-    {
-        if constexpr (MapType::template has_key<KEY>()) {
-            if constexpr (std::is_same<KEY,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<KEY>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<KEY>::VALUE,
-                "Item does not exist in type set."
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<KEY>();
     }
 };
 
@@ -163,69 +187,26 @@ template <typename SET> struct ArrayStruct;
 
 template <typename... ITEMS>
 struct ArrayStruct <TypeArray<ITEMS...>> {
-    template<size_t INDEX>
-    constexpr auto& get ()
-    {
-        static_assert(
-            AlwaysFalse<TypeIndex<INDEX>>::VALUE,
-            "Index does not exist in type array."
-        );
-    }
-};
 
+    typedef typename TypeArray<ITEMS...>::MapType MapType;
 
-template <typename HEAD>
-struct ArrayStruct <TypeArray<HEAD>> {
-
-    typedef typename TypeArray<HEAD>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-
-    HeadItemType data;
+    private:
+    MapStruct<MapType> map;
+    public:
 
     template<size_t INDEX>
     constexpr auto& get ()
     {
-        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            return data;
-        } else {
-            static_assert(
-                AlwaysFalse<TypeIndex<INDEX>>::VALUE,
-                "Index does not exist in type array."
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<TypeIndex<INDEX>>();
     }
-};
-
-
-template <typename HEAD, typename... TAIL>
-struct ArrayStruct <TypeArray<HEAD,TAIL...>> {
-
-    typedef typename TypeArray<HEAD,TAIL...>::MapType MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
-    typedef ArrayStruct<TypeArray<TAIL...>> TailType;
-
-    HeadItemType data;
-    TailType tail;
 
     template<size_t INDEX>
-    constexpr auto& get ()
+    constexpr auto& get () const
     {
-        if constexpr (MapType::template has_key<TypeIndex<INDEX>>()) {
-            if constexpr (std::is_same<TypeIndex<INDEX>,typename MapType::HeadKeyType>::value) {
-                return data;
-            } else {
-                return tail.template get<INDEX>();
-            }
-        } else {
-            static_assert(
-                AlwaysFalse<TypeIndex<INDEX>>::VALUE,
-                "Index does not exist in type array."
-            );
-            return UndefinedType::value;
-        }
+        return map.template get<TypeIndex<INDEX>>();
     }
 };
+
 
 
 }
