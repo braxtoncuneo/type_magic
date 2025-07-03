@@ -46,7 +46,7 @@ namespace container {
         info("Checking TypeMap union");
         typedef TypeMap<Binding<int,bool>>   A;
         typedef TypeMap<Binding<bool,float>> B;
-        typedef typename A::template Union<B>::type C;
+        typedef typename A::template LossyCombine<B>::type C;
         static_assert(std::is_same<
             C,
             TypeMap<Binding<int,bool>,Binding<bool,float>>
@@ -77,7 +77,7 @@ namespace container {
 
 
     void set_union_check() {
-        info("Checking SetUnion");
+        info("Checking SetLossyUnion");
         typedef SetUnion<TypeSet<int,float,bool>> SA;
         SA set_union;
         set_union.get<int>() = 123;

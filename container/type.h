@@ -61,6 +61,18 @@ struct Binding
     typedef ITEM ItemType;
 };
 
+template<typename TYPE>
+struct IsBinding
+{
+    static constexpr bool value = false;
+};
+
+template<typename KEY, typename ITEM>
+struct IsBinding<Binding<KEY,ITEM>>
+{
+    static constexpr bool value = true;
+};
+
 
 template<typename T>
 struct AlwaysFalse
@@ -97,10 +109,10 @@ struct TypeMap
     };
 
     template <typename OTHER>
-    struct Union;
+    struct LossyCombine;
 
     template <typename... ITEMS>
-    struct Union <TypeMap<ITEMS...>> {
+    struct LossyCombine <TypeMap<ITEMS...>> {
         typedef TypeMap<ITEMS...> type;
     };
 
@@ -160,6 +172,11 @@ template<typename HEAD, typename... TAIL>
 struct TypeMap <HEAD,TAIL...>
 {
 
+    static_assert(
+        IsBinding<HEAD>::value,
+        "Every argument to the TypeMap template must be a Binding specialization."
+    );
+
     typedef TypeMap<HEAD,TAIL...> SelfType;
     typedef TypeMap<TAIL...> TailType;
     typedef typename HEAD::KeyType  HeadKeyType;
@@ -213,22 +230,22 @@ struct TypeMap <HEAD,TAIL...>
 
 
     template <typename OTHER,typename ENABLE=void>
-    struct Union;
+    struct LossyCombine;
 
     template <typename... ITEMS>
-    struct Union <
+    struct LossyCombine <
         TypeMap<ITEMS...>,
         typename std::enable_if<TypeMap<ITEMS...>::template has_key<HeadKeyType>()>::type
     > {
-        typedef typename TailType::template Union<TypeMap<ITEMS...>>::type type;
+        typedef typename TailType::template LossyCombine<TypeMap<ITEMS...>>::type type;
     };
 
     template <typename... ITEMS>
-    struct Union <
+    struct LossyCombine <
         TypeMap<ITEMS...>,
         typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<HeadKeyType>())>::type
     > {
-        typedef typename TailType::template Union<TypeMap<HEAD,ITEMS...>>::type type;
+        typedef typename TailType::template LossyCombine<TypeMap<HEAD,ITEMS...>>::type type;
     };
 
     template <template<typename> typename SELECTOR,typename ENABLE=void>
@@ -239,7 +256,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<SELECTOR<HEAD>::value>::type
     > {
-        typedef typename TypeMap<HEAD>::Union<typename TailType::Filter<SELECTOR>::type>::type type;
+        typedef typename TypeMap<HEAD>::LossyCombine<typename TailType::Filter<SELECTOR>::type>::type type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -283,7 +300,7 @@ struct TypeMap <HEAD,TAIL...>
     };
 
     struct Invert {
-        typedef typename TypeMap<HeadItemType,HeadKeyType>::template Union<typename TailType::Invert>::type type;
+        typedef typename TypeMap<HeadItemType,HeadKeyType>::template LossyCombine<typename TailType::Invert>::type type;
     };
 
     template <typename PHONEY=void, typename ENABLE=void>
@@ -297,7 +314,7 @@ struct TypeMap <HEAD,TAIL...>
         typedef HEAD     BiggestItem;
         typedef TailType Remainder;
         typedef typename Remainder::Sort::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template Union<RemainderSorted>::type type;
+        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
     };
 
     template <typename PHONEY>
@@ -307,9 +324,9 @@ struct TypeMap <HEAD,TAIL...>
     > {
         typedef typename TailType::template SortHelper<>::BiggestItem BiggestItem;
         typedef typename TailType::template SortHelper<>::Remainder   TailRemainder;
-        typedef typename TypeMap<HEAD>::template Union<TailRemainder>::type Remainder;
+        typedef typename TypeMap<HEAD>::template LossyCombine<TailRemainder>::type Remainder;
         typedef typename Remainder::Sort::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template Union<RemainderSorted>::type type;
+        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
     };
 
     struct Sort {
@@ -366,6 +383,7 @@ struct TypeSet
         return MapType::template has_key<ITEM>();
     }
 
+
 };
 
 
@@ -391,7 +409,7 @@ struct TypeArray
     template<size_t INDEX, typename HEAD, typename... TAIL>
     struct TypeMapGenerator <INDEX,HEAD,TAIL...> {
         typedef typename TypeMapGenerator<INDEX+1,TAIL...>::type TailMap;
-        typedef typename TypeMap<Binding<TypeIndex<INDEX>,HEAD>>::template Union<TailMap>::type type;
+        typedef typename TypeMap<Binding<TypeIndex<INDEX>,HEAD>>::template LossyCombine<TailMap>::type type;
     };
 
     typedef typename TypeMapGenerator<0,ELEMENTS...>::type MapType;
