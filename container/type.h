@@ -14,6 +14,12 @@ namespace container {
 template<typename... BINDINGS>
 struct TypeMap;
 
+template<typename... BINDINGS>
+struct TypeSet;
+
+template<typename... BINDINGS>
+struct TypeArray;
+
 // Used to help typemaps determine the held type for a given type key
 template<typename KEY, typename MAP>
 struct TypeMapLookup;
@@ -23,6 +29,64 @@ template<typename KEY, typename TYPE>
 struct Binding;
 
 
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Template Specialization Checkers
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+template<typename... BINDINGS>
+struct IsTypeMap
+{
+    static constexpr bool value = false;
+};
+
+template<typename... BINDINGS>
+struct IsTypeMap<TypeMap<BINDINGS...>>
+{
+    static constexpr bool value = true;
+};
+
+
+template<typename... BINDINGS>
+struct IsTypeSet
+{
+    static constexpr bool value = false;
+};
+
+template<typename... BINDINGS>
+struct IsTypeSet<TypeSet<BINDINGS...>>
+{
+    static constexpr bool value = true;
+};
+
+template<typename... BINDINGS>
+struct IsTypeArray
+{
+    static constexpr bool value = false;
+};
+
+template<typename... BINDINGS>
+struct IsTypeArray<TypeArray<BINDINGS...>>
+{
+    static constexpr bool value = true;
+};
+
+
+
+template<typename TYPE>
+struct IsBinding
+{
+    static constexpr bool value = false;
+};
+
+template<typename KEY, typename ITEM>
+struct IsBinding<Binding<KEY,ITEM>>
+{
+    static constexpr bool value = true;
+};
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -59,18 +123,6 @@ struct Binding
 {
     typedef KEY  KeyType;
     typedef ITEM ItemType;
-};
-
-template<typename TYPE>
-struct IsBinding
-{
-    static constexpr bool value = false;
-};
-
-template<typename KEY, typename ITEM>
-struct IsBinding<Binding<KEY,ITEM>>
-{
-    static constexpr bool value = true;
 };
 
 
@@ -174,13 +226,17 @@ struct TypeMap <HEAD,TAIL...>
 
     static_assert(
         IsBinding<HEAD>::value,
-        "Every argument to the TypeMap template must be a Binding specialization."
+        ASSERT_TEXT("Every argument to the TypeMap template must be a Binding specialization.")
     );
 
     typedef TypeMap<HEAD,TAIL...> SelfType;
     typedef TypeMap<TAIL...> TailType;
     typedef typename HEAD::KeyType  HeadKeyType;
     typedef typename HEAD::ItemType HeadItemType;
+
+    typedef TypeSet  <typename HEAD::KeyType, typename TAIL::KeyType...>  KeySet;
+    typedef TypeArray<typename HEAD::KeyType, typename TAIL::KeyType...>  KeyArray;
+    typedef TypeArray<typename HEAD::ItemType,typename TAIL::ItemType...> ItemArray;
 
     static constexpr size_t ITEM_COUNT = TailType::ITEM_COUNT + 1;
 
@@ -267,37 +323,6 @@ struct TypeMap <HEAD,TAIL...>
         typedef typename TailType::Filter<SELECTOR>::type type;
     };
 
-    template <typename OTHER>
-    struct Intersection;
-
-    template <typename... ITEMS>
-    struct Intersection <TypeMap<ITEMS...>> {
-
-        typedef TypeMap<ITEMS...> OtherType;
-
-        template<typename OTHER_ITEM>
-        struct OtherHasKey {
-            static constexpr bool value = OtherType::template has_key<typename OTHER_ITEM::KeyType>();
-        };
-
-        typedef typename SelfType::template Filter<OtherHasKey>::type type;
-    };
-
-    template <typename OTHER>
-    struct Difference;
-
-    template <typename... ITEMS>
-    struct Difference <TypeMap<ITEMS...>> {
-
-        typedef TypeMap<ITEMS...> OtherType;
-
-        template<typename OTHER_ITEM>
-        struct OtherDoesNotHaveKey {
-            static constexpr bool value = !OtherType::template has_key<typename OTHER_ITEM::KeyType>();
-        };
-
-        typedef typename SelfType::template Filter<OtherDoesNotHaveKey>::type type;
-    };
 
     struct Invert {
         typedef typename TypeMap<HeadItemType,HeadKeyType>::template LossyCombine<typename TailType::Invert>::type type;
@@ -376,12 +401,59 @@ template<typename... ELEMENTS>
 struct TypeSet
 {
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
+    typedef TypeSet<ELEMENTS...> SelfType;
 
     template<typename ITEM>
     static constexpr bool has_item()
     {
         return MapType::template has_key<ITEM>();
     }
+
+    template <typename OTHER>
+    struct Union {
+        static_assert(
+            IsTypeSet<OTHER>::value,
+            ASSERT_TEXT("TypeSet Union operations can only occur between TypeSet specializations.")
+        );
+        typedef typename MapType::template LossyCombine<typename OTHER::MapType>::type::KeySet type;
+    };
+
+
+    template <typename OTHER>
+    struct Intersection {
+
+        static_assert(
+            IsTypeSet<OTHER>::value,
+            ASSERT_TEXT("TypeSet Intersection operations can only occur between TypeSet specializations.")
+        );
+
+        typedef OTHER OtherType;
+
+        template<typename OTHER_ITEM>
+        struct OtherHasItem {
+            static constexpr bool value = OtherType::MapType::template has_key<typename OTHER_ITEM::KeyType>();
+        };
+
+        typedef typename MapType::template Filter<OtherHasItem>::type::KeySet type;
+    };
+
+    template <typename OTHER>
+    struct Difference {
+
+        static_assert(
+            IsTypeSet<OTHER>::value,
+            ASSERT_TEXT("TypeSet Difference operations can only occur between TypeSet specializations.")
+        );
+
+        typedef OTHER OtherType;
+
+        template<typename OTHER_ITEM>
+        struct OtherDoesNotHaveItem {
+            static constexpr bool value = !OtherType::MapType::template has_key<typename OTHER_ITEM::KeyType>();
+        };
+
+        typedef typename MapType::template Filter<OtherDoesNotHaveItem>::type::KeySet type;
+    };
 
 
 };

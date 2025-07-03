@@ -43,35 +43,35 @@ namespace container {
     }
 
     void union_check() {
-        info("Checking TypeMap union");
-        typedef TypeMap<Binding<int,bool>>   A;
-        typedef TypeMap<Binding<bool,float>> B;
-        typedef typename A::template LossyCombine<B>::type C;
+        info("Checking TypeSet union");
+        typedef TypeSet<int,bool>   A;
+        typedef TypeSet<bool,float> B;
+        typedef typename A::template Union<B>::type C;
         static_assert(std::is_same<
             C,
-            TypeMap<Binding<int,bool>,Binding<bool,float>>
+            TypeSet<int,bool,float>
         >::value);
     }
 
     void intersect_check() {
-        info("Checking TypeMap intersect");
-        typedef TypeMap<Binding<int,bool>,  Binding<bool,float>> A;
-        typedef TypeMap<Binding<bool,float>,Binding<float,int>>  B;
+        info("Checking TypeSet intersect");
+        typedef TypeSet<int,bool,float> A;
+        typedef TypeSet<double,float,bool>  B;
         typedef typename A::template Intersection<B>::type C;
         static_assert(std::is_same<
             C,
-            TypeMap<Binding<bool,float>>
+            TypeSet<bool,float>
         >::value);
     }
 
     void difference_check() {
-        info("Checking TypeMap difference");
-        typedef TypeMap<Binding<int,bool>,  Binding<bool,float>> A;
-        typedef TypeMap<Binding<bool,float>>  B;
+        info("Checking TypeSet difference");
+        typedef TypeSet<int,bool,float,double> A;
+        typedef TypeSet<int,float>  B;
         typedef typename A::template Difference<B>::type C;
         static_assert(std::is_same<
             C,
-            TypeMap<Binding<int,bool>>
+            TypeSet<bool,double>
         >::value);
     }
 
