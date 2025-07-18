@@ -13,22 +13,8 @@
 
 #include "container/mod.h"
 #include "context/mod.h"
+#include "core/mod.h"
 
-
-template<typename MOD,typename RT>
-MOD get(RT& rt) {
-    return MOD(rt.set.template get<MOD>(),rt);
-}
-
-
-
-
-struct ExampleComponent
-{
-
-
-
-};
 
 #include "postamble.h"
 

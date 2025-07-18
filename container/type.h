@@ -88,34 +88,53 @@ struct IsBinding<Binding<KEY,ITEM>>
     static constexpr bool value = true;
 };
 
+}
+
+
+
+#include "meta.h"
+
+
+
+namespace container {
 
 ///////////////////////////////////////////////////////////////////////////////
-// Define templates
+// Set/Arg Converter
 ///////////////////////////////////////////////////////////////////////////////
 
 
-// Holds a template for later application
-template<template <typename> typename TEMPLATE>
-struct Meta
-{
-    template <typename ARG>
-    struct Template {
-        typedef TEMPLATE<ARG> Type;
-    };
+template<typename TYPE>
+struct SetFromArgs;
+
+template <template<typename...> typename TEMPLATE, typename... ARGS>
+struct SetFromArgs <TEMPLATE<ARGS...>> {
+    typedef TypeSet<ARGS...> type;
 };
 
-// Specializes the template provided
-template<typename TYPE, typename ARG>
-struct UnMeta
+
+///////////////////////////////////////////////////////////////////////////////
+// define templates
+///////////////////////////////////////////////////////////////////////////////
+
+
+namespace fold {
+
+template <typename A, typename B>
+struct BinarySetUnionFold
 {
-    typedef TYPE Type;
+    typedef typename A::Union<B>::type type;
 };
 
-template<template <typename> typename TEMPLATE, typename ARG>
-struct UnMeta <Meta<TEMPLATE>,ARG>
-{
-    typedef TEMPLATE<ARG> Type;
-};
+
+
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// define templates
+///////////////////////////////////////////////////////////////////////////////
+
+
 
 
 template<typename KEY, typename ITEM>
@@ -126,17 +145,16 @@ struct Binding
 };
 
 
-template<typename T>
-struct AlwaysFalse
-{
-    static constexpr bool value = false;
-};
-
-
 // Base case
 template<typename... BINDINGS>
 struct TypeMap
 {
+
+    typedef TypeSet  <>  KeySet;
+    typedef TypeSet  <>  BindingSet;
+    typedef TypeArray<>  KeyArray;
+    typedef TypeArray<>  ItemArray;
+    typedef TypeArray<>  BindingArray;
 
     static constexpr size_t ITEM_COUNT = 0;
 
@@ -146,7 +164,18 @@ struct TypeMap
         return false;
     }
 
+    template<typename KEY>
+    static constexpr bool has_item()
+    {
+        return false;
+    }
+
     static constexpr bool has_duplicate_key()
+    {
+        return false;
+    }
+
+    static constexpr bool has_duplicate_item()
     {
         return false;
     }
@@ -160,16 +189,33 @@ struct TypeMap
         typedef UndefinedType type;
     };
 
-    template <typename OTHER>
-    struct LossyCombine;
+    template <typename OTHER,typename ENABLE=void>
+    struct LossyCombine {
+        static_assert(
+            IsTypeMap<OTHER>::value,
+            "ERROR: LossyCombine operation can only occur between TypeMap specializations."
+        );
+        typedef OTHER type;
+        static constexpr bool duplicate_key = false;
+    };
 
-    template <typename... ITEMS>
-    struct LossyCombine <TypeMap<ITEMS...>> {
-        typedef TypeMap<ITEMS...> type;
+    template <typename OTHER>
+    struct Combine {
+        typedef typename LossyCombine<OTHER>::type type;
     };
 
     template <template<typename> typename SELECTOR>
     struct Filter {
+        typedef TypeMap<> type;
+    };
+
+    template <template<typename> typename SELECTOR>
+    struct FilterItems {
+        typedef TypeMap<> type;
+    };
+
+    template <template<typename> typename SELECTOR>
+    struct FilterKeys {
         typedef TypeMap<> type;
     };
 
@@ -187,6 +233,37 @@ struct TypeMap
     template <typename... ITEMS>
     struct Difference <TypeMap<ITEMS...>> {
         typedef TypeMap<> type;
+    };
+
+
+    template <template<typename> typename MAPPER>
+    struct Map {
+        typedef TypeMap<> type;
+    };
+
+    template <template<typename> typename MAPPER>
+    struct MapItems {
+        typedef TypeMap<> type;
+    };
+
+    template <template<typename> typename MAPPER>
+    struct MapKeys {
+        typedef TypeMap<> type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct Fold {
+        typedef BASE type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct FoldItems {
+        typedef BASE type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct FoldKeys {
+        typedef BASE type;
     };
 
     struct Invert {
@@ -235,8 +312,10 @@ struct TypeMap <HEAD,TAIL...>
     typedef typename HEAD::ItemType HeadItemType;
 
     typedef TypeSet  <typename HEAD::KeyType, typename TAIL::KeyType...>  KeySet;
+    typedef TypeSet  <HEAD,TAIL...>                                       BindingSet;
     typedef TypeArray<typename HEAD::KeyType, typename TAIL::KeyType...>  KeyArray;
     typedef TypeArray<typename HEAD::ItemType,typename TAIL::ItemType...> ItemArray;
+    typedef TypeArray<HEAD,TAIL...>                                       BindingArray;
 
     static constexpr size_t ITEM_COUNT = TailType::ITEM_COUNT + 1;
 
@@ -250,6 +329,16 @@ struct TypeMap <HEAD,TAIL...>
         }
     }
 
+    template<typename ITEM>
+    static constexpr bool has_item()
+    {
+        if constexpr (std::is_same<ITEM,HeadItemType>::value) {
+            return true;
+        } else {
+            return TailType::template has_item<ITEM>();
+        }
+    }
+
     static constexpr bool has_duplicate_key()
     {
         if constexpr (TailType::template has_key<HeadKeyType>()) {
@@ -259,9 +348,18 @@ struct TypeMap <HEAD,TAIL...>
         }
     }
 
+    static constexpr bool has_duplicate_item()
+    {
+        if constexpr (TailType::template has_item<HeadItemType>()) {
+            return true;
+        } else {
+            return TailType::has_duplicate_item();
+        }
+    }
+
     static_assert(
         (!TypeMap<HEAD,TAIL...>::has_duplicate_key()),
-        "TypeMap cannot contain duplicate key types."
+        ASSERT_TEXT("TypeMap cannot contain duplicate key types.")
     );
 
 
@@ -286,7 +384,12 @@ struct TypeMap <HEAD,TAIL...>
 
 
     template <typename OTHER,typename ENABLE=void>
-    struct LossyCombine;
+    struct LossyCombine {
+        static_assert(
+            IsTypeMap<OTHER>::value,
+            ASSERT_TEXT("ERROR: LossyCombine operation can only occur between TypeMap specializations.")
+        );
+    };
 
     template <typename... ITEMS>
     struct LossyCombine <
@@ -294,6 +397,7 @@ struct TypeMap <HEAD,TAIL...>
         typename std::enable_if<TypeMap<ITEMS...>::template has_key<HeadKeyType>()>::type
     > {
         typedef typename TailType::template LossyCombine<TypeMap<ITEMS...>>::type type;
+        static constexpr bool duplicate_key = true;
     };
 
     template <typename... ITEMS>
@@ -301,7 +405,26 @@ struct TypeMap <HEAD,TAIL...>
         TypeMap<ITEMS...>,
         typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<HeadKeyType>())>::type
     > {
-        typedef typename TailType::template LossyCombine<TypeMap<HEAD,ITEMS...>>::type type;
+        typedef typename TailType::template LossyCombine<TypeMap<HEAD,ITEMS...>> TailCombine;
+        typedef typename TailCombine::type type;
+        static constexpr bool duplicate_key = TailCombine::duplicate_key;
+    };
+
+
+    template <typename OTHER>
+    struct Combine {
+
+        typedef LossyCombine<OTHER> LossyCombineType;
+
+        static_assert(
+            !LossyCombineType::duplicate_key,
+            ASSERT_TEXT(
+                "ERROR: Combine operation resulted in duplicate keys. "
+                "If duplicates should be coalesced, use TypeMap's LossyCombine operation instead."
+            )
+        );
+
+        typedef typename LossyCombineType::type type;
     };
 
     template <template<typename> typename SELECTOR,typename ENABLE=void>
@@ -312,7 +435,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<SELECTOR<HEAD>::value>::type
     > {
-        typedef typename TypeMap<HEAD>::LossyCombine<typename TailType::Filter<SELECTOR>::type>::type type;
+        typedef typename TypeMap<HEAD>::Combine<typename TailType::Filter<SELECTOR>::type>::type type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -323,9 +446,75 @@ struct TypeMap <HEAD,TAIL...>
         typedef typename TailType::Filter<SELECTOR>::type type;
     };
 
+    template <template<typename> typename SELECTOR>
+    struct FilterItems
+    {
+        template <typename TYPE>
+        struct FilterAdapter {
+            static constexpr bool value = SELECTOR<typename TYPE::ItemType>::value;
+        };
+        typedef typename Filter<FilterAdapter>::type type;
+    };
+
+    template <template<typename> typename SELECTOR>
+    struct FilterKeys
+    {
+        template <typename TYPE>
+        struct FilterAdapter {
+            static constexpr bool value = SELECTOR<typename TYPE::ItemType>::value;
+        };
+        typedef typename Filter<FilterAdapter>::type type;
+    };
+
+    template <template<typename> typename MAPPER>
+    struct Map {
+        typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
+    };
+
+    template <template<typename> typename MAPPER>
+    struct MapItems {
+        template <typename TYPE>
+        struct MapAdapter {
+            typedef Binding<typename TYPE::KeyType,typename MAPPER<typename TYPE::ItemType>::type> type;
+        };
+        typedef typename Map<MapAdapter>::type type;
+    };
+
+    template <template<typename> typename MAPPER>
+    struct MapKeys {
+        template <typename TYPE>
+        struct MapAdapter {
+            typedef Binding<typename MAPPER<typename TYPE::KeyType>::type,typename TYPE::ItemType> type;
+        };
+        typedef typename Map<MapAdapter>::type type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct Fold {
+        typedef typename TypeMap<TAIL...>::template Fold<typename FOLDER<BASE,HEAD>::type,FOLDER>::type type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct FoldItems {
+        template <typename A, typename B>
+        struct FoldAdapter {
+            typedef typename FOLDER<A,typename B::ItemType>::type type;
+        };
+        typedef typename Fold<BASE,FoldAdapter>::type type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct FoldKeys {
+        template <typename A, typename B>
+        struct FoldAdapter {
+            typedef typename FOLDER<A,typename B::KeyType>::type type;
+        };
+        typedef typename Fold<BASE,FoldAdapter>::type type;
+    };
+
 
     struct Invert {
-        typedef typename TypeMap<HeadItemType,HeadKeyType>::template LossyCombine<typename TailType::Invert>::type type;
+        typedef typename TypeMap<Binding<HeadItemType,HeadKeyType>>::template LossyCombine<typename TailType::Invert::type>::type type;
     };
 
     template <typename PHONEY=void, typename ENABLE=void>
@@ -400,8 +589,14 @@ struct TypeMap <HEAD,TAIL...>
 template<typename... ELEMENTS>
 struct TypeSet
 {
+
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
     typedef TypeSet<ELEMENTS...> SelfType;
+
+    static_assert(
+        !MapType::has_duplicate_key(),
+        ASSERT_TEXT("TypeSet cannot contain duplicate items.")
+    );
 
     template<typename ITEM>
     static constexpr bool has_item()
@@ -409,13 +604,23 @@ struct TypeSet
         return MapType::template has_key<ITEM>();
     }
 
-    template <typename OTHER>
+    template <typename ITEM>
+    struct ItemAt {
+        typedef typename MapType::template ItemAt<ITEM> type;
+    };
+
+    template <typename... PARAMS>
     struct Union {
+        typedef SelfType type;
+    };
+
+    template <typename HEAD, typename... TAIL>
+    struct Union <HEAD,TAIL...> {
         static_assert(
-            IsTypeSet<OTHER>::value,
+            IsTypeSet<HEAD>::value,
             ASSERT_TEXT("TypeSet Union operations can only occur between TypeSet specializations.")
         );
-        typedef typename MapType::template LossyCombine<typename OTHER::MapType>::type::KeySet type;
+        typedef typename MapType::template LossyCombine<typename HEAD::MapType>::type::KeySet::template Union<TAIL...>::type type;
     };
 
 
@@ -456,6 +661,58 @@ struct TypeSet
     };
 
 
+    template <template<typename> typename MAPPER>
+    struct LossyMap {
+
+        typedef typename MapType::template MapItems<MAPPER>::type MappedMapType;
+        static constexpr bool duplicate_items = MapType::has_duplicate_item();
+
+        typedef typename MappedMapType::Invert::type::KeySet type;
+    };
+
+
+    template <template<typename> typename MAPPER>
+    struct Map {
+
+        typedef LossyMap<MAPPER> LossyMapType;
+
+        static_assert(
+            !LossyMapType::duplicate_items,
+            ASSERT_TEXT(
+                "ERROR: Map operation resulted in duplicate results, which would lead to duplicate items for the set. "
+                "If duplicates should be coalesced, use TypeSet's LossyMap operation instead."
+            )
+        );
+
+        typedef typename LossyMapType::type type;
+    };
+
+    template <typename BASE, template<typename,typename> typename FOLDER>
+    struct Fold {
+        typedef typename MapType::template FoldKeys<BASE,FOLDER>::type type;
+    };
+
+    template <template<typename> typename SELECTOR>
+    struct Filter {
+        typedef typename MapType::template FilterKeys<SELECTOR>::type::KeySet type;
+    };
+
+
+
+    template <template<typename...> typename TEMPLATE>
+    struct SpecializeWith {
+        typedef TEMPLATE<ELEMENTS...> type;
+    };
+
+
+    template <template<typename...> typename TEMPLATE>
+    struct CollapseAll {
+        typedef typename Filter<Meta<TEMPLATE>::template Generalizes>::type MatchingTypes;
+        typedef typename MatchingTypes::Map<SetFromArgs>::type ArgSets;
+        typedef typename ArgSets::template Fold<TypeSet<>,fold::BinarySetUnionFold>::type CombinedSet;
+        typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
+    };
+
 };
 
 
@@ -492,7 +749,65 @@ struct TypeArray
         return MapType::template has_key<TypeIndex<INDEX>> ();
     }
 
+    template <size_t INDEX>
+    struct ItemAt {
+        typedef typename MapType::template ItemAt<TypeIndex<INDEX>>::type type;
+    };
+
+    template<typename... PARAMS>
+    struct Concatenate {
+        typedef TypeArray<ELEMENTS...> type;
+    };
+
+    template<typename HEAD, typename... TAIL>
+    struct Concatenate <HEAD,TAIL...>{
+        static_assert(
+            IsTypeArray<HEAD>::value,
+            "TypeArray Concatenate operations can only occur between TypeArray specalizations."
+        );
+    };
+
+    template<typename... HEAD_ELEMENTS, typename... TAIL>
+    struct Concatenate <TypeArray<HEAD_ELEMENTS...>,TAIL...>{
+        typedef typename TypeArray<ELEMENTS...,HEAD_ELEMENTS...>::template Concatenate<TAIL...>::type type;
+    };
+
+    template <template<typename> typename SELECTOR>
+    struct Filter {
+        typedef typename MapType::template Filter<SELECTOR>::type::ItemArray type;
+    };
+
 };
+
+
+
+template<typename TYPE>
+struct EnsureTypeSetWrap
+{
+    typedef TypeSet<TYPE> type;
+};
+
+template<typename... SET_ARGS>
+struct EnsureTypeSetWrap <TypeSet<SET_ARGS...>>
+{
+    typedef TypeSet<SET_ARGS...> type;
+};
+
+
+template<typename TYPE>
+struct EnsureTypeArrayWrap
+{
+    typedef TypeArray<TYPE> type;
+};
+
+template<typename... ARRAY_ARGS>
+struct EnsureTypeArrayWrap <TypeArray<ARRAY_ARGS...>>
+{
+    typedef TypeArray<ARRAY_ARGS...> type;
+};
+
+
+
 
 
 }

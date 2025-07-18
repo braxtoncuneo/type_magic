@@ -77,7 +77,7 @@ namespace container {
 
 
     void set_union_check() {
-        info("Checking SetLossyUnion");
+        info("Checking SetUnion");
         typedef SetUnion<TypeSet<int,float,bool>> SA;
         SA set_union;
         set_union.get<int>() = 123;
@@ -86,6 +86,14 @@ namespace container {
         assert(set_union.get<float>() == 4.56f);
         set_union.get<bool>() = true;
         assert(set_union.get<bool>() == true);
+    };
+
+    void type_array_concat_check() {
+        info("Checking TypeArray concat");
+        typedef TypeArray<int,float> A;
+        typedef TypeArray<bool,double> B;
+        typedef typename A::template Concatenate<B>::type C;
+        static_assert(std::is_same<C,TypeArray<int,float,bool,double>>::value);
     };
 
 
@@ -138,6 +146,7 @@ namespace container {
             intersect_check();
             difference_check();
             set_union_check();
+            type_array_concat_check();
             array_variant_check();
             order_check();
         }
