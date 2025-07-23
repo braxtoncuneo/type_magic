@@ -71,7 +71,7 @@ using DynArrayComponent = context::SimpleComponent<
 typedef container::TypeSet<DynArray<float>> Requirements;
 typedef context::ComponentBundle<DynArrayComponent<float>,ArrayAllocComponent<float>> Bundle;
 typedef context::DependencyGraph<Bundle> Graph;
-typedef Graph::template DepMapBuild<Requirements>::type DepMap;
+typedef Graph::template DepMapBuild<Requirements>::Result DepMap;
 static_assert(AlwaysFalse<DepMap>::values,"NOPE");
 
 

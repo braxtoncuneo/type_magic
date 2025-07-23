@@ -117,17 +117,51 @@ struct SetFromArgs <TEMPLATE<ARGS...>> {
 ///////////////////////////////////////////////////////////////////////////////
 
 
-namespace fold {
+namespace util {
 
-template <typename A, typename B>
-struct BinarySetUnionFold
-{
-    typedef typename A::Union<B>::type type;
-};
 
+namespace type_set {
+
+    template <typename A, typename B>
+    struct BinaryUnion
+    {
+        typedef typename A::Union<B>::type type;
+    };
+
+}
+
+
+namespace type_map {
+
+    template<typename TYPE>
+    struct KeySet {
+        static_assert(
+            IsTypeMap<TYPE>::value,
+            ASSERT_TEXT("ERROR: Only TypeMap specializations are valid arguments for this template.")
+        );
+        typedef typename TYPE::KeySet type;
+    };
+
+    template<typename TYPE>
+    struct ItemSet {
+        static_assert(
+            IsTypeMap<TYPE>::value,
+            ASSERT_TEXT("ERROR: Only TypeMap specializations are valid arguments for this template.")
+        );
+        typedef typename TYPE::ItemSet type;
+    };
+
+    template <typename A, typename B>
+    struct BinaryCombine
+    {
+        typedef typename A::Combine<B>::type type;
+    };
 
 
 }
+
+}
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -586,6 +620,9 @@ struct TypeMap <HEAD,TAIL...>
 };
 
 
+
+
+
 template<typename... ELEMENTS>
 struct TypeSet
 {
@@ -709,7 +746,7 @@ struct TypeSet
     struct CollapseAll {
         typedef typename Filter<Meta<TEMPLATE>::template Generalizes>::type MatchingTypes;
         typedef typename MatchingTypes::Map<SetFromArgs>::type ArgSets;
-        typedef typename ArgSets::template Fold<TypeSet<>,fold::BinarySetUnionFold>::type CombinedSet;
+        typedef typename ArgSets::template Fold<TypeSet<>,util::type_set::BinaryUnion>::type CombinedSet;
         typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
     };
 
@@ -763,7 +800,7 @@ struct TypeArray
     struct Concatenate <HEAD,TAIL...>{
         static_assert(
             IsTypeArray<HEAD>::value,
-            "TypeArray Concatenate operations can only occur between TypeArray specalizations."
+            ASSERT_TEXT("TypeArray Concatenate operations can only occur between TypeArray specalizations.")
         );
     };
 
@@ -777,7 +814,40 @@ struct TypeArray
         typedef typename MapType::template Filter<SELECTOR>::type::ItemArray type;
     };
 
+    static constexpr bool IS_EMPTY = (MapType::ITEM_COUNT == 0);
+
+    template<typename TYPE=void>
+    struct PopFront {
+        static_assert(
+            !IS_EMPTY,
+            ASSERT_TEXT("ERROR: Attempted to use PopFront for an empty TypeArray.")
+        );
+        typedef typename MapType::TailType::ItemArray type;
+    };
+
+    template<typename TYPE=void>
+    struct Front {
+        static_assert(
+            !IS_EMPTY,
+            ASSERT_TEXT("ERROR: Attempted to use Front for an empty TypeArray.")
+        );
+        typedef typename MapType::HeadItemType type;
+    };
+
+    template<typename TYPE>
+    struct PushFront {
+        static_assert(
+            !IS_EMPTY,
+            ASSERT_TEXT("ERROR: Attempted to use PopFront for an empty TypeArray.")
+        );
+        typedef TypeArray<TYPE,ELEMENTS...> type;
+    };
+
 };
+
+
+
+
 
 
 
