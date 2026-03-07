@@ -1,6 +1,8 @@
 #include <type_traits>
 #include <cassert>
 #include <stdexcept>
+#include <vector>
+#include <cxxabi.h>
 
 #include "preamble.h"
 
@@ -137,7 +139,33 @@
 
 #include "module_check.cpp"
 
+
+typedef container::TypeSet<
+	ArrayStack<float>
+> Requirements;
+
+typedef context::ComponentBundle<
+	ArrayStackComponent<float>,
+	DynArrayComponent<float>,
+	ArrayAllocComponent<float>
+> Bundle;
+
+typedef context::DepMapBuild<Bundle,Requirements> DepMapBuild;
+typedef typename DepMapBuild::Result DepMap;
+
+typedef typename context::Prune<DepMap> Prune;
+
+typedef typename context::DepMapCheck<Requirements,DepMap,typename Prune::Result> Check;
+//static_assert(AlwaysFalse<DepMap>::values,"NOPE");
+
+
 int main() {
+
+    std::cout << container::repr::StringRepr<typename context::SolutionSequence<DepMapBuild>::Result>::repr() << std::endl;
+    std::cout << container::repr::StringRepr<DepMapBuild::Result>::repr() << std::endl;
+    std::cout << container::repr::StringRepr<typename context::SolutionSequence<Prune>::Result>::repr() << std::endl;
+
+    std::cout << Check::unsat_diagnostic_string();
 
     return 0;
 }

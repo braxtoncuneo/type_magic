@@ -46,6 +46,29 @@ struct SpecializeOrFallBack<DEFAULT, typename AlwaysVoid<TEMPLATE<ARGS...>>::typ
 };
 
 
+// Detector idiom, but for overload checks
+template <typename FUNC>
+struct InvokeCheck {
+
+    constexpr InvokeCheck(FUNC f) {}
+
+    template<typename TYPE>
+    struct Invoker {
+
+        auto invoke(FUNC f, TYPE value) {
+            return f(value);
+        }
+
+    };
+
+    template<typename TYPE>
+    constexpr bool can_invoke() {
+        return !::SpecializeOrFallBack< int, void, Invoker , TYPE>::fell_back;
+    }
+};
+
+
+
 template <template <class...> class TEMPLATE, class... ARGS>
 using SpecializeOrNever = typename SpecializeOrFallBack<Never, void, TEMPLATE, ARGS...>::type;
 

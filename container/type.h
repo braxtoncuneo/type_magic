@@ -113,7 +113,7 @@ struct SetFromArgs <TEMPLATE<ARGS...>> {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// define templates
+// define utility templates
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -160,6 +160,203 @@ namespace type_map {
 
 }
 
+
+    template <template <typename> typename FUNC>
+    struct Negate {
+        template<typename TYPE>
+        struct Template {
+            static constexpr bool value = !FUNC<TYPE>::value;
+        };
+    };
+
+
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// define representation functionality (used for diagnostics)
+///////////////////////////////////////////////////////////////////////////////
+
+namespace repr {
+    
+    struct StringReprNode {
+
+        std::string open;
+        std::vector<StringReprNode> content;
+        std::string close;
+
+        size_t depth() {
+            int result = 1;
+            for (StringReprNode element : content) {
+                int local_depth = element.depth();
+                result = result >= local_depth+1 ? result : local_depth + 1;
+            }
+            return result;
+        }
+
+        size_t raw_size() {
+            size_t result = 0;
+            result += open.size();
+            for (StringReprNode element : content) {
+                result += element.raw_size();
+            }
+            result += close.size();
+            return result;
+        }
+
+        std::string to_string(int nesting_depth, bool force_indent) {
+            std::string result = "";
+            if (force_indent) {
+                result += std::string(nesting_depth*4,' ');
+            } else {
+                result += " ";
+            }
+            result += open;
+            if (content.size() == 0) {
+                result += close + ',';
+                return result;
+            } else if ( (depth()<4) && (raw_size() < 200)) {
+                for (StringReprNode node : content) {
+                    result += node.to_string(nesting_depth+1,false);
+                }
+                result += ' ' + close + ',';
+                return result;
+            } else {
+                for (StringReprNode node : content) {
+                    result += '\n' + node.to_string(nesting_depth+1,true);
+                }
+                result += '\n' + std::string(nesting_depth*4,' ') + close + ',';
+                return result;
+            }
+        }
+        
+        std::string to_string() {
+            return to_string(0,true);
+        }
+
+    };
+
+    template<typename TYPE>
+    struct StringRepr;
+    
+    template<typename TYPE>
+    struct StringContentRepr {
+        static_assert(IsTypeArray<TYPE>::value,"Only TypeArrays may be supplied.");
+
+        static void repr_recurse(std::vector<StringReprNode> &result) {
+            result.push_back(StringRepr<typename TYPE::Front<>::type>::repr_node());
+            StringContentRepr<typename TYPE::PopFront<>::type>::repr_recurse(result);
+        }
+
+        static std::vector<StringReprNode> repr() {
+            std::vector<StringReprNode> result;
+            StringContentRepr<TYPE>::repr_recurse(result);
+            return result;
+        }
+
+    };
+    
+    template<>
+    struct StringContentRepr <TypeArray<>> {
+        static void repr_recurse(std::vector<StringReprNode> result) {}
+        static std::vector<StringReprNode> repr() {
+            return std::vector<StringReprNode>();
+        }
+    };
+   
+
+    template<typename TYPE>
+    std::string type_name() {
+        size_t size = 0;
+        int    status = 0;
+        char *demangled = abi::__cxa_demangle(typeid(TYPE).name(),nullptr,&size,&status);
+        std::string name = "[demangle error]";
+        if (status == 0) {
+            name = demangled;
+            free(demangled);
+        }
+        return name;
+    }
+
+
+    template<typename TYPE>
+    struct StringRepr {
+        static StringReprNode repr_node() {
+            return StringReprNode{type_name<TYPE>(),{},""};
+        }
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+    };
+    
+    
+    template<typename... TYPES>
+    struct StringRepr <TypeMap<TYPES...>> {
+        typedef TypeMap<TYPES...> Type; 
+        static StringReprNode repr_node() {
+            return StringReprNode {
+                "TypeMap {",
+                StringContentRepr<typename Type::BindingArray>::repr(),
+                "}"
+            };
+        }
+
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+    };
+    
+    template<typename... TYPES>
+    struct StringRepr <TypeSet<TYPES...>> {
+        typedef TypeSet<TYPES...> Type; 
+        static StringReprNode repr_node() {
+            return StringReprNode {
+                "TypeSet {",
+                StringContentRepr<typename Type::MapType::KeyArray>::repr(),
+                "}"
+            };
+        }
+
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+    };
+    
+    template<typename... TYPES>
+    struct StringRepr <TypeArray<TYPES...>> {
+        typedef TypeArray<TYPES...> Type; 
+        static StringReprNode repr_node() {
+            return StringReprNode {
+                "TypeArray {",
+                StringContentRepr<Type>::repr(),
+                "}"
+            };
+        }
+
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+    };
+
+    template<typename... TYPES>
+    struct StringRepr <Binding<TYPES...>> {
+        typedef Binding<TYPES...> Type; 
+        static StringReprNode repr_node() {
+            return StringReprNode {
+                "Binding {",
+                StringContentRepr<TypeArray<typename Type::KeyType,typename Type::ItemType>>::repr(),
+                "}"
+            };
+        }
+
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+    };
+
+    
+
 }
 
 
@@ -176,6 +373,16 @@ struct Binding
 {
     typedef KEY  KeyType;
     typedef ITEM ItemType;
+    
+    static std::string repr_open() {
+        return "Binding {";
+    }
+
+    static std::string repr_close() {
+        return "}";
+    }
+
+    typedef TypeArray<KeyType,ItemType> ReprContent;
 };
 
 
@@ -319,14 +526,6 @@ struct TypeMap
     struct DefaultStructOrder {
         typedef TypeMap<> type;
     };
-
-    static void structure_print_recurse() {}
-
-    static void print_items() {
-        printf("{\n");
-        structure_print_recurse();
-        printf("}\n");
-    }
 
 };
 
@@ -605,18 +804,6 @@ struct TypeMap <HEAD,TAIL...>
         typedef typename DefaultStructOrderHelper<>::type type;
     };
 
-    static void structure_print_recurse() {
-        printf("\t%s : %s;\n",typeid(HeadKeyType).name(),typeid(HeadItemType).name());
-        TailType::structure_print_recurse();
-    }
-
-    static void print_items() {
-        printf("{\n");
-        structure_print_recurse();
-        printf("}\n");
-    }
-
-
 };
 
 
@@ -640,6 +827,12 @@ struct TypeSet
     {
         return MapType::template has_key<ITEM>();
     }
+
+
+    template<typename ITEM>
+    struct HasItem {
+        static constexpr bool value = has_item<ITEM>();
+    };
 
     template <typename ITEM>
     struct ItemAt {
@@ -749,7 +942,7 @@ struct TypeSet
         typedef typename ArgSets::template Fold<TypeSet<>,util::type_set::BinaryUnion>::type CombinedSet;
         typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
     };
-
+    
 };
 
 
@@ -763,6 +956,9 @@ struct TypeIndex {
 template<typename... ELEMENTS>
 struct TypeArray
 {
+
+
+    typedef TypeArray<ELEMENTS...> SelfType;
 
     template<size_t INDEX, typename... ELEMS>
     struct TypeMapGenerator;
@@ -836,12 +1032,14 @@ struct TypeArray
 
     template<typename TYPE>
     struct PushFront {
-        static_assert(
-            !IS_EMPTY,
-            ASSERT_TEXT("ERROR: Attempted to use PopFront for an empty TypeArray.")
-        );
         typedef TypeArray<TYPE,ELEMENTS...> type;
     };
+
+    template<typename TYPE>
+    struct PushBack {
+        typedef TypeArray<ELEMENTS...,TYPE> type;
+    };
+    
 
 };
 

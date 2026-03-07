@@ -9,18 +9,28 @@
 template<typename TYPE>
 struct ArrayAlloc
 {
+
     template<typename COMPONENT>
     struct Check {
-        ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, alloc, TYPE*(size_t) )
-        ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, free,  void(TYPE*) )
+        static constexpr bool x = ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, alloc, TYPE*(size_t) );
+        static constexpr bool y = ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, free,  void(TYPE*) );
+    
+        static_assert(y,"YIPPY");
     };
 };
 
 
 template<typename TYPE>
-struct DynArray{
-
+struct DynArray
+{
 };
+
+
+template<typename Type>
+struct ArrayStack
+{
+};
+
 
 namespace impl {
 
@@ -44,8 +54,15 @@ struct DynArrayImpl {
         int   size;
         TYPE *ptr;
     };
+};
 
-
+template<typename TYPE>
+struct ArrayStackImpl {
+    template<typename CONTEXT>
+    struct ArrayStack {
+        int   size;
+        TYPE *ptr;
+    };
 };
 
 }
@@ -68,11 +85,14 @@ using DynArrayComponent = context::SimpleComponent<
 >;
 
 
-typedef container::TypeSet<DynArray<float>> Requirements;
-typedef context::ComponentBundle<DynArrayComponent<float>,ArrayAllocComponent<float>> Bundle;
-typedef context::DependencyGraph<Bundle> Graph;
-typedef Graph::template DepMapBuild<Requirements>::Result DepMap;
-static_assert(AlwaysFalse<DepMap>::values,"NOPE");
+template<typename TYPE>
+using ArrayStackComponent = context::SimpleComponent<
+    impl::ArrayStackImpl<TYPE>,
+    context::RequirementSet<DynArray<TYPE>>,
+    context::ImplementationSet<ArrayStack<TYPE>>
+>;
+
+
 
 
 #endif // HARMONIZE_CORE_ARRAY

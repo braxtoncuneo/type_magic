@@ -50,7 +50,7 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
 
     ArrayUnion<TypeArray<ITEMS...>> field;
 
-    ArrayVariant <TypeArray<ITEMS...>> ()
+    ArrayVariant()
         : index_value(ITEM_COUNT)
     {}
 
@@ -73,21 +73,21 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
     template<size_t INDEX>
     inline void set (typename MapType::template ItemAt<TypeIndex<INDEX>>::type value)
     {
-        field.get<INDEX>() = value;
+        field.template get<INDEX>() = value;
         index_value = INDEX;
     }
 
     template<size_t INDEX>
     inline auto& unsafe_get () const
     {
-        return field.get<INDEX>();
+        return field.template get<INDEX>();
     }
 
     template<size_t INDEX>
     inline auto& try_get () const
     {
         if (holds<INDEX>()) {
-            return &field.get<INDEX>();
+            return &field.template get<INDEX>();
         } else {
             return nullptr;
         }

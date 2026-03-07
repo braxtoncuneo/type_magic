@@ -54,7 +54,7 @@ struct Function <FUNC,TypeMap<BINDINGS...>>
     public:
 
     template <typename... ARGS>
-    Function<FUNC,TypeMap<BINDINGS...>>(ARGS... args)
+    Function(ARGS... args)
         : arg_tuple(args...)
     {
         static_assert(

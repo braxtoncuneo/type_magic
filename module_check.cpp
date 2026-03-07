@@ -27,13 +27,49 @@ namespace container {
 
     using namespace ::container;
 
-    void map_check() {
-        info("Checking MapStruct");
-        MapStruct<TypeMap<
+
+    void repr_check() {
+
+        info("Checking Representations");
+        typedef TypeMap<
             Binding<float,int>,
             Binding<bool,float>,
             Binding<int,bool>
-        >> map;
+        > SmallMap;
+        std::cout << repr::StringRepr<SmallMap>::repr() << std::endl;
+
+        typedef TypeMap<
+            Binding<
+                TypeMap<Binding<int,float>>,
+                int
+            >,
+            Binding<
+                bool,
+                TypeMap<
+                    Binding<bool,TypeMap<>>
+                >
+            >,
+            Binding<int,bool>
+        > ComplexMap;
+        std::cout << repr::StringRepr<ComplexMap>::repr() << std::endl;
+       
+        typedef TypeSet<int,float,bool> SmallSet;
+        std::cout << repr::StringRepr<SmallSet>::repr() << std::endl;
+       
+        typedef TypeArray<int,float,bool> SmallArray;
+        std::cout << repr::StringRepr<SmallArray>::repr() << std::endl;
+
+
+    }
+
+    void map_check() {
+        info("Checking MapStruct");
+        typedef TypeMap<
+            Binding<float,int>,
+            Binding<bool,float>,
+            Binding<int,bool>
+        > M;
+        MapStruct<M> map;
         map.get<float>() = 123;
         map.get<bool>() = 4.56f;
         map.get<int>() = false;
@@ -134,13 +170,14 @@ namespace container {
 
 }
 
+
     class CheckLaunch {
         static CheckLaunch launcher;
         public:
         CheckLaunch() {
             using namespace container;
             info("Running checks...");
-            //set_check();
+            repr_check();
             map_check();
             union_check();
             intersect_check();
