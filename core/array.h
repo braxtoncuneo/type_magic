@@ -9,7 +9,6 @@
 template<typename TYPE>
 struct ArrayAlloc
 {
-
     template<typename COMPONENT>
     struct Check {
         static constexpr bool x = ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, alloc, TYPE*(size_t) );
@@ -26,7 +25,7 @@ struct DynArray
 };
 
 
-template<typename Type>
+template<typename TYPE>
 struct ArrayStack
 {
 };
@@ -35,59 +34,104 @@ struct ArrayStack
 namespace impl {
 
 template<typename TYPE>
-struct ArrayAllocImpl {
-    static TYPE *alloc(size_t size) {
-        return new TYPE[size];
-    }
-    static void free(TYPE* ptr) {
-        delete ptr;
-    }
-};
+struct CPUArrayAlloc {
 
-
-ArrayAlloc<float>::Check<ArrayAllocImpl<float>> __check;
-
-template<typename TYPE>
-struct DynArrayImpl {
     template<typename CONTEXT>
-    struct DynArray {
-        int   size;
-        TYPE *ptr;
+    struct Impl {
+        static TYPE *alloc(size_t size) {
+            return new TYPE[size];
+        }
+        static void free(TYPE* ptr) {
+            delete ptr;
+        }
     };
+
 };
 
 template<typename TYPE>
-struct ArrayStackImpl {
+struct GPUArrayAlloc {
+
     template<typename CONTEXT>
-    struct ArrayStack {
+    struct Impl {
+        static TYPE *alloc(size_t size) {
+            return new TYPE[size];
+        }
+        static void free(TYPE* ptr) {
+            delete ptr;
+        }
+    };
+
+};
+
+
+
+template<typename TYPE>
+struct CPUDynArray {
+
+    struct Impl {
         int   size;
         TYPE *ptr;
     };
+
 };
+
+
+template<typename TYPE>
+struct CPUArrayStack {
+
+    struct Impl {
+        int   size;
+        TYPE *ptr;
+    };
+
+};
+
+struct GPU{};
+struct CPU{};
 
 }
 
+using GPU = context::SimpleModule <
+    impl::GPU,
+    context::RequirementSet<>,
+    context::ImplementationSet<impl::GPU>
+>;
+
+using CPU = context::SimpleModule <
+    impl::CPU,
+    context::RequirementSet<>,
+    context::ImplementationSet<impl::CPU>
+>;
 
 
 template<typename TYPE>
-using ArrayAllocComponent = context::SimpleComponent <
-    impl::ArrayAllocImpl<TYPE>,
-    context::RequirementSet<>,
+using GPUArrayAlloc = context::SimpleModule <
+    Meta<impl::GPUArrayAlloc<TYPE>::template Impl>,
+    context::RequirementSet<impl::GPU>,
+    context::ImplementationSet<impl::GPUArrayAlloc<TYPE>>
+>;
+
+
+
+template<typename TYPE>
+using CPUArrayAlloc = context::SimpleModule <
+    Meta<impl::CPUArrayAlloc<TYPE>::template Impl>,
+    context::RequirementSet<impl::CPU>,
     context::ImplementationSet<ArrayAlloc<TYPE>>
 >;
 
 
 template<typename TYPE>
-using DynArrayComponent = context::SimpleComponent<
-    impl::DynArrayImpl<TYPE>,
+using CPUDynArray = context::SimpleModule<
+    typename impl::CPUDynArray<TYPE>::Impl,
     context::RequirementSet<ArrayAlloc<TYPE>>,
     context::ImplementationSet<DynArray<TYPE>>
 >;
 
 
 template<typename TYPE>
-using ArrayStackComponent = context::SimpleComponent<
-    impl::ArrayStackImpl<TYPE>,
+using CPUArrayStack = context::SimpleModule<
+    typename impl::CPUArrayStack<TYPE>::Impl,
     context::RequirementSet<DynArray<TYPE>>,
     context::ImplementationSet<ArrayStack<TYPE>>
 >;

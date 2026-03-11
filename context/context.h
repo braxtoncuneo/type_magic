@@ -3,6 +3,7 @@
 
 #include "../container/mod.h"
 
+#include <iostream>
 
 namespace context {
 
@@ -12,7 +13,7 @@ namespace context {
     };
 
     template<typename TYPE>
-    struct IsComponent
+    struct IsModule
     {
         static constexpr bool value = !SpecializeOrFallBack<DoesNotExist,void,_util::GetImplFor,TYPE>::fell_back;
     };
@@ -41,12 +42,12 @@ namespace context {
         typedef container::TypeSet<IMPLEMENTATIONS...> SetType;
     };
 
-    template<typename IMPL, typename... SUBSPECS>
-    struct SimpleComponent
+    template<typename IMPL, typename... SUBROOTS>
+    struct SimpleModule
     {
 
-        typedef typename container::template TypeSet<SUBSPECS...>::template CollapseAll<RequirementSet>::type ReqSet;
-        typedef typename container::template TypeSet<SUBSPECS...>::template CollapseAll<ImplementationSet>::type::SetType ImplSet;
+        typedef typename container::template TypeSet<SUBROOTS...>::template CollapseAll<RequirementSet>::type ReqSet;
+        typedef typename container::template TypeSet<SUBROOTS...>::template CollapseAll<ImplementationSet>::type::SetType ImplSet;
 
         template<typename TRAIT>
         struct ImplFor {
@@ -54,15 +55,14 @@ namespace context {
             typedef typename container::TypeArray<
                 container::TypeMap<>,container::TypeMap<container::Binding<IMPL,typename ReqSet::SetType>>
             >::template ItemAt<(size_t)TRAIT_VALID>::type type;
-
         };
 
     };
 
-    template <typename... COMPONENTS>
-    struct ComponentBundle {
+    template <typename... MODULES>
+    struct ModuleBundle {
 
-        typedef container::TypeSet<COMPONENTS...> SubComponentSet;
+        typedef container::TypeSet<MODULES...> SubModuleSet;
 
         template<typename TRAIT>
         struct ImplFor {
@@ -71,27 +71,27 @@ namespace context {
             struct CombineImpl {
                 static_assert(
                     container::IsTypeMap<A>::value,
-                    ASSERT_TEXT("INTERNAL ERROR: Folding combine operation of ComponentBundle of ImplFor should fold into a TypeMap.")
+                    ASSERT_TEXT("INTERNAL ERROR: Folding combine operation of ModuleBundle of ImplFor should fold into a TypeMap.")
                 );
                 static_assert(
-                    IsComponent<B>::value,
-                    ASSERT_TEXT("ERROR: A constituent of a ComponentBundle does not have the members required of a component.")
+                    IsModule<B>::value,
+                    ASSERT_TEXT("ERROR: A constituent of a ModuleBundle does not have the members required of a module.")
                 );
                 typedef typename B::template ImplFor<TRAIT>::type ImplMap;
                 static_assert(
                     container::IsTypeMap<ImplMap>::value,
-                    ASSERT_TEXT("ERROR: A constituent of a ComponentBundle did not return a TypeMap from its ImplFor template.")
+                    ASSERT_TEXT("ERROR: A constituent of a ModuleBundle did not return a TypeMap from its ImplFor template.")
                 );
                 typedef typename A::LossyCombine<ImplMap> LossyCombo;
                 typedef typename LossyCombo::type type;
                 static_assert(
                     !LossyCombo::duplicate_key,
                     ASSERT_TEXT( "ERROR: The same type is listed as an implementation multiple times! Each implementation should be "
-                    "generated only once across all components.")
+                    "generated only once across all modules.")
                 );
             };
 
-            typedef typename SubComponentSet::template Fold<container::TypeMap<>,CombineImpl>::type type;
+            typedef typename SubModuleSet::template Fold<container::TypeMap<>,CombineImpl>::type type;
         };
 
     };
@@ -105,7 +105,7 @@ namespace context {
 
 
     template<
-        typename SPEC,
+        typename ROOT,
         typename REQ_SET,
         typename TRAIT_MAP=container::TypeMap<>,
         typename IMPL_MAP=container::TypeMap<>
@@ -125,7 +125,7 @@ namespace context {
             ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
         );
         
-        typedef DepMapBuild<SPEC,REQ_SET,TRAIT_MAP,IMPL_MAP> SelfType;
+        typedef DepMapBuild<ROOT,REQ_SET,TRAIT_MAP,IMPL_MAP> SelfType;
 
         template <typename TYPE>
         struct NotInOldTraits {
@@ -136,7 +136,7 @@ namespace context {
         typedef typename REQ_SET::template Filter<NotInOldTraits>::type UnQueriedTraits;
 
         // Get a mapping of unqueried traits to the implementation maps returned for those traits
-        typedef typename UnQueriedTraits::MapType::template MapItems<SPEC::template ImplFor>::type NewDepMap;
+        typedef typename UnQueriedTraits::MapType::template MapItems<ROOT::template ImplFor>::type NewDepMap;
 
         // Extract a mapping from all queried traits to their implementations
         typedef typename NewDepMap::template MapItems<container::util::type_map::KeySet>::type NewTraitMap;
@@ -154,7 +154,7 @@ namespace context {
         typedef typename NewImplMapReqs::template Difference<typename UpdatedTraitMap::KeySet>::type NewReqSet;
     
         // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
-        typedef DepMapBuild<SPEC,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
+        typedef DepMapBuild<ROOT,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
         typedef typename NextIteration::FinalIteration FinalIteration;
         typedef typename NextIteration::Result Result;
         typedef typename Result::TraitMap TraitMap;
@@ -163,14 +163,14 @@ namespace context {
 
 
     template <
-        typename SPEC,
+        typename ROOT,
         typename TRAIT_MAP,
         typename IMPL_MAP
     >
-    struct DepMapBuild <SPEC,container::TypeSet<>,TRAIT_MAP,IMPL_MAP>
+    struct DepMapBuild <ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP>
     {
 
-        typedef DepMapBuild<SPEC,container::TypeSet<>,TRAIT_MAP,IMPL_MAP> SelfType;
+        typedef DepMapBuild<ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP> SelfType;
         typedef TRAIT_MAP TraitMap;
         typedef IMPL_MAP  ImplMap;
         typedef SelfType FinalIteration;
@@ -215,7 +215,7 @@ namespace context {
 
     template <typename DEP_MAP, typename PREV_DEP_MAP=void>
     struct Prune {
-        typedef typename DEP_MAP::TraitMap::template FilterKeys<TraitHasImplementations<typename DEP_MAP::ImplMap>::template Selector>::type UpdatedTraitMap;
+        typedef typename DEP_MAP::TraitMap::template FilterItems<TraitHasImplementations<typename DEP_MAP::ImplMap>::template Selector>::type UpdatedTraitMap;
         typedef typename DEP_MAP::ImplMap::template FilterItems<ImplementationHasTraits<typename DEP_MAP::TraitMap>::template Selector>::type UpdatedImplMap;
 
         typedef Prune<DepMap<UpdatedTraitMap,UpdatedImplMap>,DEP_MAP> NextIteration;
@@ -276,6 +276,7 @@ namespace context {
             UpdatedImplSet
         > NextIteration;
 
+        typedef typename NextIteration::FinalIteration FinalIteration;
         typedef typename NextIteration::Result Result;
 
     };
@@ -315,22 +316,25 @@ namespace context {
     template<typename REQ_SET, typename FULL_MAP, typename PRUNED_MAP>
     struct DepMapCheck {
 
-        typedef typename container::util::Negate<PRUNED_MAP::TraitMap::KeySet::template HasItem> TraitIsNotSat; 
-        typedef typename container::util::Negate<PRUNED_MAP::ImplMap ::KeySet::template HasItem> CompIsNotSat; 
+        typedef typename container::util::Negate<PRUNED_MAP::TraitMap::template HasKey> TraitIsNotSat; 
+        typedef typename container::util::Negate<PRUNED_MAP::ImplMap ::template HasKey> CompIsNotSat; 
         
         typedef typename FULL_MAP::TraitMap::template FilterKeys<TraitIsNotSat::template Template>::type UnsatTraitMap;
         typedef typename FULL_MAP::ImplMap::template  FilterKeys<CompIsNotSat ::template Template>::type  UnsatImplMap;
 
+        typedef typename REQ_SET::template Intersection<typename UnsatTraitMap::KeySet>::type TopLevelUnsatReqs;
 
-        typedef typename UnsatRecurse<
+        typedef UnsatRecurse<
             FULL_MAP,
             typename UnsatTraitMap::KeySet,
             typename UnsatImplMap::KeySet,
-            REQ_SET,
+            TopLevelUnsatReqs,
             container::TypeSet<>,
             container::TypeSet<>,
             container::TypeSet<>
-        >::Result ReqUnsat;
+        > UnsatSearch;
+       
+       typedef typename UnsatSearch::Result ReqUnsat;
     
         static constexpr bool SOME_TRAITS_UNSATISFIED = UnsatTraitMap::ITEM_COUNT > 0;
         static constexpr bool SOME_IMPLS_UNSATISFIED  = UnsatImplMap::ITEM_COUNT > 0;
@@ -356,7 +360,11 @@ namespace context {
         static std::string unsat_trait_diagnostic() {
             std::string trait_name = container::repr::type_name<UNSAT_TRAIT>();
             std::string result = std::string("Trait '")+trait_name+"' is not implemented. Implementation candidates include: ";
-            result += type_list_string<typename UnsatTraitMap::template ItemAt<UNSAT_TRAIT>::type::MapType::KeyArray>();
+            
+            typedef typename FULL_MAP::TraitMap::template ItemAt<UNSAT_TRAIT>::type ImplSet;
+            typedef typename ImplSet::template Intersection<typename UnsatImplMap::KeySet>::type::MapType::KeyArray UnsatCompArray;
+            
+            result += type_list_string<UnsatCompArray>();
             return result;
         }
 
@@ -403,26 +411,100 @@ namespace context {
         }
 
         static std::string unsat_diagnostic_string() {
+            /*
+            std::cout << "Pruned traits:"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename PRUNED_MAP::TraitMap>::repr_node().to_string() << std::endl;
+            std::cout << "Pruned impls :"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename PRUNED_MAP::ImplMap>::repr_node().to_string() << std::endl;
+            std::cout << "Original traits:"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename FULL_MAP::TraitMap>::repr_node().to_string() << std::endl;
+            std::cout << "Original impls :"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename FULL_MAP::ImplMap>::repr_node().to_string() << std::endl;
+            std::cout << "Unsat traits:"<<std::endl;
+            std::cout<< container::repr::StringRepr<UnsatTraitMap>::repr_node().to_string() << std::endl;
+            std::cout << "Unsat impls s:"<<std::endl;
+            std::cout<< container::repr::StringRepr<UnsatImplMap>::repr_node().to_string() << std::endl;
+            std::cout << "ReqUnsat traits:"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename ReqUnsat::TraitSet>::repr_node().to_string() << std::endl;
+            std::cout << "ReqUnsat impls :"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename ReqUnsat::ImplSet>::repr_node().to_string() << std::endl;
+            
+            std::cout << "ReqUnsat impls :"<<std::endl;
+            std::cout<< container::repr::StringRepr<typename SolutionSequence<UnsatSearch>::Result>::repr_node().to_string() << std::endl;
+            */
             typedef typename ReqUnsat::TraitSet::MapType::KeyArray TraitArray;
             typedef typename ReqUnsat::ImplSet ::MapType::KeyArray ImplArray;
-
             return unsat_trait_list_string<TraitArray>() + unsat_comp_list_string<ImplArray>();
         }
         
 
     
     };
+
+
     
 
+    template <template<typename> typename... COMPONENTS>
+    struct Context : COMPONENTS<Context<COMPONENTS...>>... {
 
-    template<typename UNSAT_REQ_SET>
-    struct DepMapUnsatSearch {
+        template<template<typename> typename COMP>
+        COMP<Context<COMPONENTS...>>& as() {
+            return *static_cast<COMP<Context<COMPONENTS...>>*>(this);
+        }
         
     };
-    
-    template<>
-    struct DepMapUnsatSearch <container::TypeSet<>> {
-        
+
+
+    template<
+        template<typename> typename COMP,
+        template<typename> typename...COMPONENTS
+    >
+    COMP<Context<COMPONENTS...>>& as(Context<COMPONENTS...>& context) {
+        return context.template as<COMP>();
+    }
+
+
+    template<
+        template<typename> typename END_COMP,
+        template<typename> typename START_COMP,
+        template<typename> typename...COMPONENTS
+    >
+    END_COMP<Context<COMPONENTS...>>& via(START_COMP<Context<COMPONENTS...>>* comp) {
+        return as<END_COMP<Context<COMPONENTS...>>>(*static_cast<Context<COMPONENTS...>*>(comp));
+    }
+
+
+
+    template<typename TRAIT, typename IMPL_ARRAY>
+    struct BindPriority {
+        typedef TRAIT Trait;
+        typedef IMPL_ARRAY ImplArray;
+    };
+
+
+    template<typename PRUNED>
+    struct EagerSolve {
+        typedef typename PRUNED::TraitMap::template MapItems<container::util::type_set::GetFirst>::type TraitMap; 
+        typedef typename PRUNED::TraitMap::Invert::type::KeySet ImplSet;
+    };
+
+    template<typename COMPONENT_SET>
+    struct ContextFromComponents;
+
+    template<typename... COMPONENTS>
+    struct ContextFromComponents <container::TypeSet<COMPONENTS...>> {
+        typedef Context<EnsureMetaWrap<COMPONENTS>::type::template Template...> type;
+    };
+     
+    template<typename ROOT, typename REQS, template<typename>typename SOLVER>
+    struct Reify {
+
+        typedef typename DepMapBuild<REQS,ROOT>::Result DepMap;
+        typedef typename Prune<DepMap>::Result PrunedDepMap;
+        typedef          DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
+        typedef typename SOLVER<PrunedDepMap>::ImplSet ComponentSet;
+        typedef typename ContextFromComponents<ComponentSet>::type Result;
+
     };
 
 
@@ -458,11 +540,6 @@ namespace context {
     */
 
 
-    template<typename SPEC>
-    struct Reify {
-        
-    };
-
 
 
 
@@ -489,17 +566,22 @@ namespace context {
     */
 }
 
+
+
+
+
+
 namespace container {
 namespace repr {
 
     template<
-        typename SPEC,
+        typename ROOT,
         typename REQ_SET,
         typename TRAIT_MAP,
         typename IMPL_MAP
     > struct StringRepr <
         context::DepMapBuild<
-            SPEC,
+            ROOT,
             REQ_SET,
             TRAIT_MAP,
             IMPL_MAP
@@ -576,6 +658,53 @@ namespace repr {
         static std::string repr() {
             return repr_node().to_string();
         }
+    };
+    
+    template<
+        typename FULL_MAP,
+        typename UNSAT_TRAITS,
+        typename UNSAT_IMPLS,
+        typename FRONTIER_TRAIT_SET,
+        typename FRONTIER_IMPL_SET,
+        typename TRAIT_SET,
+        typename IMPL_SET
+    > struct StringRepr < context::UnsatRecurse <
+        FULL_MAP,
+        UNSAT_TRAITS,
+        UNSAT_IMPLS,
+        FRONTIER_TRAIT_SET,
+        FRONTIER_IMPL_SET,
+        TRAIT_SET,
+        IMPL_SET
+    > > {
+        
+        context::UnsatRecurse <
+            FULL_MAP,
+            UNSAT_TRAITS,
+            UNSAT_IMPLS,
+            FRONTIER_TRAIT_SET,
+            FRONTIER_IMPL_SET,
+            TRAIT_SET,
+            IMPL_SET
+        > Type;
+        
+        static StringReprNode repr_node() {
+            return StringReprNode {
+                "UnsatRecurse {",
+                StringContentRepr<TypeArray<
+                    FRONTIER_TRAIT_SET,
+                    FRONTIER_IMPL_SET,
+                    TRAIT_SET,
+                    IMPL_SET
+                >>::repr(),
+                "}"
+            };
+        }
+
+        static std::string repr() {
+            return repr_node().to_string();
+        }
+
     };
 
 }

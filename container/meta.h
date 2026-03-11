@@ -132,5 +132,22 @@ struct UnMeta <Meta<TEMPLATE>,ARG>
 };
 
 
+template<typename TYPE>
+struct EnsureMetaWrap
+{
+    template <typename... ARGS>
+    struct Template {
+        typedef TYPE type;
+    };
+    
+    typedef Meta<Template> type;
+};
+
+template<template<typename>typename TEMPLATE>
+struct EnsureMetaWrap <Meta<TEMPLATE>>
+{
+    typedef Meta<TEMPLATE> type;
+};
+
 
 #endif // HARMONIZE_CONTAINER_META

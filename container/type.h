@@ -128,6 +128,16 @@ namespace type_set {
         typedef typename A::Union<B>::type type;
     };
 
+    template<typename TYPE_SET>
+    struct GetFirst
+    {
+        static_assert(
+            IsTypeSet<TYPE_SET>::value,
+            ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+        );
+        typedef typename TYPE_SET::MapType::KeyArray::template PopFront<>::type type;
+    };
+
 }
 
 
@@ -156,7 +166,6 @@ namespace type_map {
     {
         typedef typename A::Combine<B>::type type;
     };
-
 
 }
 
@@ -421,6 +430,12 @@ struct TypeMap
         return false;
     }
 
+
+    template <typename KEY>
+    struct HasKey {
+        static constexpr bool value = has_key<KEY>();
+    };
+
     template <typename KEY>
     struct ItemAt {
         static_assert(
@@ -595,6 +610,11 @@ struct TypeMap <HEAD,TAIL...>
         ASSERT_TEXT("TypeMap cannot contain duplicate key types.")
     );
 
+    template <typename KEY>
+    struct HasKey {
+        static constexpr bool value = has_key<KEY>();
+    };
+
 
     template <typename KEY_QUERY,typename ENABLE=void>
     struct ItemAt;
@@ -694,7 +714,7 @@ struct TypeMap <HEAD,TAIL...>
     {
         template <typename TYPE>
         struct FilterAdapter {
-            static constexpr bool value = SELECTOR<typename TYPE::ItemType>::value;
+            static constexpr bool value = SELECTOR<typename TYPE::KeyType>::value;
         };
         typedef typename Filter<FilterAdapter>::type type;
     };
