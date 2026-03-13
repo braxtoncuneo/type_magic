@@ -119,34 +119,35 @@ struct Meta
 
 
 // Specializes the template provided
-template<typename TYPE, typename ARG>
+template<typename TYPE, typename... ARGS>
 struct UnMeta
 {
     typedef TYPE Type;
 };
 
-template<template <typename> typename TEMPLATE, typename ARG>
-struct UnMeta <Meta<TEMPLATE>,ARG>
+template<template <typename> typename TEMPLATE, typename... ARGS>
+struct UnMeta <Meta<TEMPLATE>,ARGS...>
 {
-    typedef TEMPLATE<ARG> Type;
+    typedef TEMPLATE<ARGS...> Type;
 };
 
 
 template<typename TYPE>
 struct EnsureMetaWrap
 {
+
     template <typename... ARGS>
     struct Template {
-        typedef TYPE type;
+        typedef TYPE Type;
     };
     
-    typedef Meta<Template> type;
+    typedef Meta<Template> Type;
 };
 
-template<template<typename>typename TEMPLATE>
+template<template<typename...>typename TEMPLATE>
 struct EnsureMetaWrap <Meta<TEMPLATE>>
 {
-    typedef Meta<TEMPLATE> type;
+    typedef Meta<TEMPLATE> Type;
 };
 
 

@@ -2,6 +2,9 @@
 #define HARMONIZE_CORE_ARRAY
 
 #include "../context/mod.h"
+#include "platform.h"
+
+
 
 
 
@@ -11,10 +14,10 @@ struct ArrayAlloc
 {
     template<typename COMPONENT>
     struct Check {
-        static constexpr bool x = ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, alloc, TYPE*(size_t) );
-        static constexpr bool y = ASSERT_HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, free,  void(TYPE*) );
+
+        //static constexpr bool has_alloc = HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, alloc, TYPE*(size_t) );
+        //static constexpr bool has_free  = HAS_MEMBER_FOR_TRAIT( ArrayAlloc<TYPE>, COMPONENT, free,  void(TYPE*) );
     
-        static_assert(y,"YIPPY");
     };
 };
 
@@ -86,28 +89,15 @@ struct CPUArrayStack {
 
 };
 
-struct GPU{};
-struct CPU{};
-
 }
 
-using GPU = context::SimpleModule <
-    impl::GPU,
-    context::RequirementSet<>,
-    context::ImplementationSet<impl::GPU>
->;
 
-using CPU = context::SimpleModule <
-    impl::CPU,
-    context::RequirementSet<>,
-    context::ImplementationSet<impl::CPU>
->;
 
 
 template<typename TYPE>
 using GPUArrayAlloc = context::SimpleModule <
     Meta<impl::GPUArrayAlloc<TYPE>::template Impl>,
-    context::RequirementSet<impl::GPU>,
+    context::RequirementSet<GPU>,
     context::ImplementationSet<impl::GPUArrayAlloc<TYPE>>
 >;
 
@@ -116,7 +106,7 @@ using GPUArrayAlloc = context::SimpleModule <
 template<typename TYPE>
 using CPUArrayAlloc = context::SimpleModule <
     Meta<impl::CPUArrayAlloc<TYPE>::template Impl>,
-    context::RequirementSet<impl::CPU>,
+    context::RequirementSet<CPU>,
     context::ImplementationSet<ArrayAlloc<TYPE>>
 >;
 

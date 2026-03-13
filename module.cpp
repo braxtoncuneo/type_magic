@@ -20,46 +20,93 @@
 
 #include "postamble.h"
 
-#include "module_check.cpp"
+
 
 
 typedef container::TypeSet<
-	ArrayStack<float>
+	ArrayStack<float>,
+    exec::Loop
 > Requirements;
 
 typedef context::ModuleBundle<
 	CPUArrayStack<float>,
 	CPUDynArray<float>,
 	GPUArrayAlloc<float>,
-	CPUArrayAlloc<float>,
+    CPUArrayAlloc<float>,
+    exec::CPULoop,
     CPU
-> Bundle;
+> RootModule;
 
-typedef context::DepMapBuild<Bundle,Requirements> DepMapBuild;
-typedef typename DepMapBuild::Result DepMap;
 
-typedef typename context::Prune<DepMap> Prune;
+typedef typename context::CreateContextType<
+    RootModule,
+    Requirements,
+    context::EagerSolve
+>::type Context;
 
-typedef typename context::DepMapCheck<Requirements,DepMap,typename Prune::Result> Check;
 
-typedef typename context::Reify<Requirements,Bundle,context::EagerSolve>::Result Context;
+struct isA{};
+struct isB{};
+
+template<typename CONTEXT>
+struct A {
+    int x;
+    double &get_y() {
+        return via<isB>(this).y;
+    }
+};
+
+template<typename CONTEXT>
+struct B {
+    double y;
+    int &get_x() {
+        return via<isA>(this).x;
+    }
+};
+
+using aModule = context::SimpleModule <
+    Meta<A>,
+    context::RequirementSet<>,
+    context::ImplementationSet<isA>
+>;
+
+using bModule = context::SimpleModule <
+    Meta<B>,
+    context::RequirementSet<>,
+    context::ImplementationSet<isB>,
+    alloc::StdAllocBytes
+>;
+
+typedef context::ModuleBundle<aModule,bModule> rootModule;
 
 
 
 int main() {
 
-    std::cout << container::repr::StringRepr<typename context::SolutionSequence<DepMapBuild>::Result>::repr() << std::endl;
-    std::cout << container::repr::StringRepr<DepMapBuild::Result>::repr() << std::endl;
-    std::cout << container::repr::StringRepr<typename context::SolutionSequence<Prune>::Result>::repr() << std::endl;
+    typedef context::CreateContextType<
+        rootModule,
+        container::TypeSet<
+            isA,
+            isB,
+            alloc::AllocBytes
+         >,
+        context::EagerSolve
+    >::type MyContext;
+   
+    MyContext context(
+        A<MyContext>{1234},
+        B<MyContext>{5.67}
+    );
 
-    std::cout << Check::unsat_diagnostic_string();
+    as<isA>(context).get_y() *= 2;
+    as<isB>(context).get_x() *= 4;
 
-    Context context;
+    std::cout << as<isA>(context).x << std::endl;
+    std::cout << as<isB>(context).y << std::endl;
+
 
     return 0;
 }
-
-
 
 
 

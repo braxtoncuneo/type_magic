@@ -1,5 +1,6 @@
 all:
-	g++ module.cpp -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true -o mod_check.exe -ftemplate-backtrace-limit=0
+	#nvcc  module.cpp -o mod_check.exe --compiler-options "-std=c++20 -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0"
+	g++  module.cpp -o mod_check.exe -std=c++20 -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0 -fconcepts-diagnostics-depth=10
 
 perf:
 	clang++ module.cpp -stdlib=libc++ -std=c++20 -Wall -ftime-trace -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true -o mod_check.exe

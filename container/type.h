@@ -135,7 +135,7 @@ namespace type_set {
             IsTypeSet<TYPE_SET>::value,
             ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
         );
-        typedef typename TYPE_SET::MapType::KeyArray::template PopFront<>::type type;
+        typedef typename TYPE_SET::MapType::KeyArray::template Front<>::type type;
     };
 
 }

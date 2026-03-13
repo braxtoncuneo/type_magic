@@ -59,6 +59,13 @@ namespace context {
 
     };
 
+    template<typename TRAIT>
+    struct Self : context::SimpleModule <
+        TRAIT,
+        context::RequirementSet<>,
+        context::ImplementationSet<TRAIT>
+    > {};
+
     template <typename... MODULES>
     struct ModuleBundle {
 
@@ -442,36 +449,48 @@ namespace context {
     };
 
 
-    
 
-    template <template<typename> typename... COMPONENTS>
-    struct Context : COMPONENTS<Context<COMPONENTS...>>... {
+    template<typename... ARGS>
+    struct ParentContext;
 
-        template<template<typename> typename COMP>
-        COMP<Context<COMPONENTS...>>& as() {
-            return *static_cast<COMP<Context<COMPONENTS...>>*>(this);
+    template<typename TRAIT_MAP>
+    struct TraitMapAsModuleBundle {
+        //typedef typename TraitMap::template FilterKeys<Meta<ParentContext>::Generalizes>::type ParentTraitMap;
+        //typedef TraitMap::template FilterKeys<container::util::Negate<Meta<ParentContext>::Generalizes>> LocalTraitMap; 
+    };
+
+
+    template <typename TRAIT_MAP, typename... COMPONENTS>
+    struct Context : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
+        
+
+        typedef Context<TRAIT_MAP,COMPONENTS...> Self;
+
+        template<typename TRAIT>
+        using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
+
+        template<typename TRAIT>
+        ComponentLookup<TRAIT>& as() {
+            return *static_cast<ComponentLookup<TRAIT>*>(this);
         }
+
+        template<typename... ARGS>
+        Context(ARGS... args)
+            : ARGS(args)...
+        {}
         
     };
 
 
-    template<
-        template<typename> typename COMP,
-        template<typename> typename...COMPONENTS
-    >
-    COMP<Context<COMPONENTS...>>& as(Context<COMPONENTS...>& context) {
-        return context.template as<COMP>();
-    }
+    template<typename TRAIT_MAP,typename...COMPONENTS>
+    struct ParentContext <TRAIT_MAP,COMPONENTS...> {
+        //typedef Context<TRAIT_MAP,COMPONENTS...> ParentType;
+        //ParentType& parent_ref;
+    };
 
 
-    template<
-        template<typename> typename END_COMP,
-        template<typename> typename START_COMP,
-        template<typename> typename...COMPONENTS
-    >
-    END_COMP<Context<COMPONENTS...>>& via(START_COMP<Context<COMPONENTS...>>* comp) {
-        return as<END_COMP<Context<COMPONENTS...>>>(*static_cast<Context<COMPONENTS...>*>(comp));
-    }
+
+
 
 
 
@@ -485,87 +504,74 @@ namespace context {
     template<typename PRUNED>
     struct EagerSolve {
         typedef typename PRUNED::TraitMap::template MapItems<container::util::type_set::GetFirst>::type TraitMap; 
-        typedef typename PRUNED::TraitMap::Invert::type::KeySet ImplSet;
+        typedef typename TraitMap::Invert::type::KeySet ComponentSet;
     };
 
-    template<typename COMPONENT_SET>
+    template<typename TRAIT_MAP, typename COMPONENT_SET>
     struct ContextFromComponents;
 
-    template<typename... COMPONENTS>
-    struct ContextFromComponents <container::TypeSet<COMPONENTS...>> {
-        typedef Context<EnsureMetaWrap<COMPONENTS>::type::template Template...> type;
+    template<typename TRAIT_MAP, typename... COMPONENTS>
+    struct ContextFromComponents <TRAIT_MAP,container::TypeSet<COMPONENTS...>> {
+        typedef Context<TRAIT_MAP,COMPONENTS...> type;
     };
      
     template<typename ROOT, typename REQS, template<typename>typename SOLVER>
-    struct Reify {
+    struct CreateContextType {
 
-        typedef typename DepMapBuild<REQS,ROOT>::Result DepMap;
-        typedef typename Prune<DepMap>::Result PrunedDepMap;
-        typedef          DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
-        typedef typename SOLVER<PrunedDepMap>::ImplSet ComponentSet;
-        typedef typename ContextFromComponents<ComponentSet>::type Result;
-
-    };
-
-
-    /*
-
-    template<typename REQ_SET, typename DEP_MAP>
-    struct SolutionGraph {
-
-        struct SolutionNode {
-            std::string kind;
-            std::string name;
-            std::string status;
-            std::string reason;
-            std::vector<SolutionNode> dependencies;
-        };
-
-        std::unordered_map<std::type_index,std::shared_ptr<SolutionNode>> registry;
-        std::vector<SolutionNode> requirements;
-
-        template<typename TYPE>
-        std::shared_ptr<SolutionNode> trait_node() {
-            
-        }
-
-        template<typename TYPE>
-        std::shared_ptr<SolutionNode> impl_node() {
-
-        }
-
-
+        typedef typename context::DepMapBuild<ROOT,REQS>::Result DepMap;
+        typedef typename context::Prune<DepMap>::Result PrunedDepMap;
+        typedef          context::DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
+        typedef                   SOLVER<PrunedDepMap> Solution;
+        typedef typename context::ContextFromComponents<typename Solution::TraitMap,typename Solution::ComponentSet>::type type;
 
     };
-    */
 
-
-
-
-
-    /*
-
-    template <typename... COMPONENTS>
-    struct Specification {
-
-        template <typename REQ>
-        struct Implements {
-            static constexpr bool value = (COMPONENTS::template Implements<REQ>::value || ...);
-        };
-
-        constexpr bool valid () {
-
+    
+    template<typename CONTEXT_CHECK>
+    struct InvalidContext {
+        static std::string diagnostic_string() {
+            return CONTEXT_CHECK::unsat_diagnostic_string();
         }
     };
 
+    template<typename ROOT, typename REQS, template<typename>typename SOLVER,typename... ARGS>
+    auto create_context(ARGS... args) {
+        
+        typedef typename context::DepMapBuild<ROOT,REQS>::Result DepMap;
+        typedef typename context::Prune<DepMap>::Result PrunedDepMap;
+        typedef          context::DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
 
-    template <typename COMPONENT>
-    struct Context {
-    };
+        if constexpr (Check::SOME_REQS_UNSATISFIED) {
+            return InvalidContext<Check>{};
+        } else {
+            typedef                   SOLVER<PrunedDepMap> Solution;
+            typedef typename context::ContextFromComponents<typename Solution::TraitMap,typename Solution::ComponentSet>::type ContextType;
+            return ContextType(args...);
+        }
+    
+    }
 
-    */
 }
 
+template<
+    typename TRAIT,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& as(context::Context<TRAIT_MAP,COMPONENTS...>& context) {
+    return context.template as<TRAIT>();
+}
+
+
+template<
+    typename TRAIT,
+    template<typename> typename START_COMP,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
+    return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
+}
 
 
 
