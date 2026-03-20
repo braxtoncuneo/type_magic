@@ -5,31 +5,64 @@
 
 namespace storage {
 
+    namespace cpu {
+        struct Global : context::TagTrait<Global> {};
+    }
 
-template<typename STORAGE_TYPE>
-struct Storage{}; 
+    namespace gpu {
+        struct Global : context::TagTrait<Global> {};
+        struct Shared : context::TagTrait<Shared> {};
+        struct Private : context::TagTrait<Private> {};
+    }
 
-namespace cpu {
-    struct Global {};
-}
+    namespace hetero {
+        struct Managed : context::TagTrait<Managed> {};
+        struct Unified : context::TagTrait<Unified> {};
+    }
 
-namespace gpu {
-    struct Global {};
-    struct Shared {};
-}
 
-struct Default{};
+    struct Default : context::TagTrait<Default> {};
+    
+    template<typename... ARGS>
+    struct Path{};
 
-template<typename SCOPE, typename TYPE, typename STORAGE_TYPE=Default>
-struct StaticMember {
-    TYPE value;  
-};
+    template<typename... ARGS>
+    struct ValueType{};
+
+    template<typename...>
+    struct StorageType{};
+
+    template<typename... ARGS>
+    struct StaticMember;
+
+
+    template<typename... PATH_ARGS, typename STORAGE_TYPE, typename VALUE_TYPE>
+    struct StaticMember <Path<PATH_ARGS...>,STORAGE_TYPE,VALUE_TYPE> {
+        typedef VALUE_TYPE   ValueType;
+        typedef STORAGE_TYPE StorageType;
+    };
+
+
+    template<typename STORAGE_TYPE>
+    struct HasStorageType {
+
+        template<typename... ARGS>
+        struct Selector;
+
+        template<typename... PATH_ARGS, typename VALUE_TYPE>
+        struct Selector <Path<PATH_ARGS...>,STORAGE_TYPE,VALUE_TYPE> {
+            typedef VALUE_TYPE   ValueType;
+            typedef STORAGE_TYPE StorageType;
+        };
+    };
+
+
 
 
 }
 
 namespace scope {
-    struct Global{};
+    struct Global : context::TagTrait<Global> {};
 }
 
 
@@ -63,10 +96,13 @@ namespace alloc {
 
     using StdAllocBytes = context::SimpleModule<
         StdAllocBytesImpl,
-        context::RequirementSet<CPU>,
+        context::RequirementSet<platform::CPU>,
         context::ImplementationSet<AllocBytes>
     >;
 
 }
+
+
+
 
 #endif

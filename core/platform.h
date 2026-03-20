@@ -1,17 +1,14 @@
 #ifndef HARMONIZE_CORE_PLATFORM
 #define HARMONIZE_CORE_PLATFORM
 
-struct CPU : context::SimpleModule <
-    CPU,
-    context::RequirementSet<>,
-    context::ImplementationSet<CPU>
-> {};
+namespace platform {
 
+struct CPU : context::TagTrait<CPU> {};
+struct GPU : context::TagTrait<GPU> {};
 
-struct GPU : context::SimpleModule <
-    GPU,
-    context::RequirementSet<>,
-    context::ImplementationSet<GPU>
-> {};
+struct CUDA : context::TagTrait<CUDA> {};
+struct ROCM : context::TagTrait<ROCM> {};
+
+}
 
 #endif

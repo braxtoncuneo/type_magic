@@ -42,12 +42,12 @@ namespace context {
         typedef container::TypeSet<IMPLEMENTATIONS...> SetType;
     };
 
-    template<typename IMPL, typename... SUBROOTS>
+    template<typename IMPL, typename... ARGS>
     struct SimpleModule
     {
 
-        typedef typename container::template TypeSet<SUBROOTS...>::template CollapseAll<RequirementSet>::type ReqSet;
-        typedef typename container::template TypeSet<SUBROOTS...>::template CollapseAll<ImplementationSet>::type::SetType ImplSet;
+        typedef typename container::template TypeSet<ARGS...>::template CollapseAll<RequirementSet>::type ReqSet;
+        typedef typename container::template TypeSet<ARGS...>::template CollapseAll<ImplementationSet>::type::SetType ImplSet;
 
         template<typename TRAIT>
         struct ImplFor {
@@ -60,11 +60,30 @@ namespace context {
     };
 
     template<typename TRAIT>
-    struct Self : context::SimpleModule <
+    struct TagTrait : SimpleModule <
         TRAIT,
         context::RequirementSet<>,
         context::ImplementationSet<TRAIT>
     > {};
+
+
+    /*
+    template<typename META_TRAIT, typename META_MODULE>
+    struct MetaModule {
+        
+        template<typename TRAIT>
+        struct ImplFor {
+            typedef container::TypeMap<>;
+        };
+        
+        template<typename... ARGS>
+        struct ImplFor <META_TRAIT<ARGS...>>{
+            typedef META_MODULE::Template<ARGS...>::ImplFor<META_TRAIT<ARGS...>>::type type;
+        };
+
+    };
+    */
+
 
     template <typename... MODULES>
     struct ModuleBundle {
@@ -449,6 +468,17 @@ namespace context {
     };
 
 
+    template<typename MODULE_TYPE>
+    struct SubModule {
+        static_assert(
+                IsModule<MODULE_TYPE>::value,
+                "Only types that implement the Module interface may serve as arguments to the SubModule trait."
+        );
+    };
+
+
+    template<typename... ARGS>
+    struct Context;
 
     template<typename... ARGS>
     struct ParentContext;
@@ -460,11 +490,11 @@ namespace context {
     };
 
 
-    template <typename TRAIT_MAP, typename... COMPONENTS>
-    struct Context : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
-        
 
-        typedef Context<TRAIT_MAP,COMPONENTS...> Self;
+    template <typename TRAIT_MAP, typename... COMPONENTS>
+    struct Context <TRAIT_MAP,COMPONENTS...> : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
+        
+        typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
 
         template<typename TRAIT>
         using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
@@ -483,7 +513,7 @@ namespace context {
 
 
     template<typename TRAIT_MAP,typename...COMPONENTS>
-    struct ParentContext <TRAIT_MAP,COMPONENTS...> {
+    struct ParentContext <Context<TRAIT_MAP,COMPONENTS...>> {
         //typedef Context<TRAIT_MAP,COMPONENTS...> ParentType;
         //ParentType& parent_ref;
     };

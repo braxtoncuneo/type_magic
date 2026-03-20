@@ -9,6 +9,9 @@
 
 namespace exec {
 
+template<typename REQ_SET,typename TASK>
+struct Launch {};
+
 template<typename TASK>
 struct Execute {};
 
@@ -34,10 +37,13 @@ namespace cpu {
     };
 
 
-    template<typename FN_TRAIT>
-    struct SubContextExecute  {
+    template<typename REQ_SET, typename TASK>
+    struct Launch {
 
-        
+        template<typename CONTEXT>
+        struct LaunchImpl {
+            
+        };
 
     };
 
@@ -55,7 +61,7 @@ namespace cpu {
 
 using CPULoop = context::SimpleModule <
     Meta<impl::cpu::Loop>,
-    context::RequirementSet<CPU>,
+    context::RequirementSet<platform::CPU>,
     context::ImplementationSet<Loop>
 >;
 

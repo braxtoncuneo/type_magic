@@ -97,7 +97,7 @@ struct CPUArrayStack {
 template<typename TYPE>
 using GPUArrayAlloc = context::SimpleModule <
     Meta<impl::GPUArrayAlloc<TYPE>::template Impl>,
-    context::RequirementSet<GPU>,
+    context::RequirementSet<platform::GPU>,
     context::ImplementationSet<impl::GPUArrayAlloc<TYPE>>
 >;
 
@@ -106,7 +106,7 @@ using GPUArrayAlloc = context::SimpleModule <
 template<typename TYPE>
 using CPUArrayAlloc = context::SimpleModule <
     Meta<impl::CPUArrayAlloc<TYPE>::template Impl>,
-    context::RequirementSet<CPU>,
+    context::RequirementSet<platform::CPU>,
     context::ImplementationSet<ArrayAlloc<TYPE>>
 >;
 

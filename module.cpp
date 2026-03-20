@@ -23,30 +23,12 @@
 
 
 
-typedef container::TypeSet<
-	ArrayStack<float>,
-    exec::Loop
-> Requirements;
-
-typedef context::ModuleBundle<
-	CPUArrayStack<float>,
-	CPUDynArray<float>,
-	GPUArrayAlloc<float>,
-    CPUArrayAlloc<float>,
-    exec::CPULoop,
-    CPU
-> RootModule;
-
-
-typedef typename context::CreateContextType<
-    RootModule,
-    Requirements,
-    context::EagerSolve
->::type Context;
-
 
 struct isA{};
 struct isB{};
+
+
+
 
 template<typename CONTEXT>
 struct A {
@@ -56,6 +38,15 @@ struct A {
     }
 };
 
+using aModule = context::SimpleModule <
+    Meta<A>,
+    context::RequirementSet<>,
+    context::ImplementationSet<isA>
+>;
+
+
+
+
 template<typename CONTEXT>
 struct B {
     double y;
@@ -64,47 +55,50 @@ struct B {
     }
 };
 
-using aModule = context::SimpleModule <
-    Meta<A>,
-    context::RequirementSet<>,
-    context::ImplementationSet<isA>
->;
 
 using bModule = context::SimpleModule <
     Meta<B>,
     context::RequirementSet<>,
-    context::ImplementationSet<isB>,
-    alloc::StdAllocBytes
+    context::ImplementationSet<isB>
 >;
 
-typedef context::ModuleBundle<aModule,bModule> rootModule;
+typedef context::ModuleBundle<
+    aModule,
+    bModule,
+    alloc::StdAllocBytes,
+    platform::CPU
+> rootModule;
 
 
 
 int main() {
+
+    using alloc::AllocBytes;
 
     typedef context::CreateContextType<
         rootModule,
         container::TypeSet<
             isA,
             isB,
-            alloc::AllocBytes
+            AllocBytes
          >,
         context::EagerSolve
-    >::type MyContext;
+    >::type Ctx;
    
-    MyContext context(
-        A<MyContext>{1234},
-        B<MyContext>{5.67}
+    Ctx ctx(
+        B<Ctx>{5.67},
+        A<Ctx>{1234}
     );
 
-    as<isA>(context).get_y() *= 2;
-    as<isB>(context).get_x() *= 4;
+    as<isA>(ctx).get_y() *= 2;
+    as<isB>(ctx).get_x() *= 4;
 
-    std::cout << as<isA>(context).x << std::endl;
-    std::cout << as<isB>(context).y << std::endl;
+    std::cout << as<isA>(ctx).x << std::endl;
+    std::cout << as<isB>(ctx).y << std::endl;
 
-
+    void *ptr = as<AllocBytes>(ctx).alloc_bytes(10);
+    as<AllocBytes>(ctx).free_bytes(ptr);
+    
     return 0;
 }
 
