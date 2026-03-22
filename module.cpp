@@ -23,7 +23,7 @@
 
 
 
-
+// Traits
 struct isA{};
 struct isB{};
 
@@ -45,8 +45,6 @@ using aModule = context::SimpleModule <
 >;
 
 
-
-
 template<typename CONTEXT>
 struct B {
     double y;
@@ -64,41 +62,52 @@ using bModule = context::SimpleModule <
 
 typedef context::ModuleBundle<
     aModule,
-    bModule,
-    alloc::StdAllocBytes,
-    platform::CPU
+    bModule
 > rootModule;
 
 
+struct Bad {};
+struct Worse {};
+
+
+template<typename CTX>
+void run() {
+ 
+
+
+    if constexpr (CTX::Info::SATISFIED) {
+        
+        CTX ctx(
+            As<isA,CTX>{1234},
+            As<isB,CTX>{5.67}
+        );
+
+        as<isA>(ctx).get_y() *= 2;
+        as<isB>(ctx).get_x() *= 4;
+
+        std::cout << as<isA>(ctx).x << std::endl;
+        std::cout << as<isB>(ctx).y << std::endl;
+
+    } else {
+        CTX ctx;
+        std::cout << as<context::ContextInfo>(ctx).error_string();
+    }
+
+}
 
 int main() {
-
-    using alloc::AllocBytes;
-
-    typedef context::CreateContextType<
+    
+    typedef typename context::CreateContextType<
         rootModule,
         container::TypeSet<
             isA,
-            isB,
-            AllocBytes
+            isB
          >,
         context::EagerSolve
     >::type Ctx;
-   
-    Ctx ctx(
-        B<Ctx>{5.67},
-        A<Ctx>{1234}
-    );
 
-    as<isA>(ctx).get_y() *= 2;
-    as<isB>(ctx).get_x() *= 4;
+    run<Ctx>();
 
-    std::cout << as<isA>(ctx).x << std::endl;
-    std::cout << as<isB>(ctx).y << std::endl;
-
-    void *ptr = as<AllocBytes>(ctx).alloc_bytes(10);
-    as<AllocBytes>(ctx).free_bytes(ptr);
-    
     return 0;
 }
 
