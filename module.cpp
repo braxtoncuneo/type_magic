@@ -73,8 +73,6 @@ struct Worse {};
 template<typename CTX>
 void run() {
  
-
-
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
@@ -103,7 +101,7 @@ int main() {
             isA,
             isB
          >,
-        context::EagerSolve
+        Meta<context::EagerSolve>
     >::type Ctx;
 
     run<Ctx>();

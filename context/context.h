@@ -492,10 +492,12 @@ namespace context {
 
     struct ContextInfo {};
 
-    template<typename CHECK>
+    template<typename ROOT, typename CHECK, typename SOLVER>
     struct ContextInfoImpl {
         template<typename CONTEXT>
         struct Impl {
+            typedef ROOT   Root;
+            typedef SOLVER Solver;
             static constexpr bool SATISFIED = CHECK::ALL_REQS_SATISFIED;
             static std::string error_string() {
                 return CHECK::unsat_diagnostic_string();
@@ -565,40 +567,40 @@ namespace context {
     };
     
 
-    template<bool VALID, typename PRUNED_DEP_MAP, typename CHECK, template<typename>typename SOLVER>
+    template<bool VALID, typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
     struct ContextSolveGuard;
    
-    template<typename PRUNED_DEP_MAP, typename CHECK, template<typename>typename SOLVER>
-    struct ContextSolveGuard <true,PRUNED_DEP_MAP,CHECK,SOLVER>
+    template<typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
+    struct ContextSolveGuard <true,ROOT,PRUNED_DEP_MAP,CHECK,SOLVER>
     {
-        typedef SOLVER<PRUNED_DEP_MAP> Solution;
+        typedef typename SOLVER::template Template<PRUNED_DEP_MAP>::Type Solution;
 
-        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<CHECK>::template Impl>>>
+        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>>
                                   ::template LossyCombine<typename Solution::TraitMap>::type TraitMap;
         
-        typedef typename container::TypeSet<Meta<ContextInfoImpl<CHECK>::template Impl>>
+        typedef typename container::TypeSet<Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>
                                   ::template Union<typename Solution::ComponentSet>::type ComponentSet;
 
 
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type type;
     };
    
-    template<typename PRUNED_DEP_MAP, typename CHECK, template<typename>typename SOLVER>
-    struct ContextSolveGuard <false,PRUNED_DEP_MAP,CHECK,SOLVER>
+    template<typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
+    struct ContextSolveGuard <false,ROOT,PRUNED_DEP_MAP,CHECK,SOLVER>
     {
-        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<CHECK>::template Impl>>> TraitMap;
-        typedef container::TypeSet<Meta<ContextInfoImpl<CHECK>::template Impl>> ComponentSet;
+        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>> TraitMap;
+        typedef container::TypeSet<Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>> ComponentSet;
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type type;
     };
 
 
-    template<typename ROOT, typename REQS, template<typename>typename SOLVER>
+    template<typename ROOT, typename REQS, typename SOLVER>
     struct CreateContextType {
 
         typedef typename context::DepMapBuild<ROOT,REQS>::Result        DepMap;
         typedef typename context::Prune<DepMap>::Result                 PrunedDepMap;
         typedef          context::DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
-        typedef typename ContextSolveGuard<Check::ALL_REQS_SATISFIED,PrunedDepMap,Check,SOLVER>::type type;
+        typedef typename ContextSolveGuard<Check::ALL_REQS_SATISFIED,ROOT,PrunedDepMap,Check,SOLVER>::type type;
 
     };
 
