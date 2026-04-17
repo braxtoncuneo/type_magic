@@ -9,6 +9,14 @@
 
 namespace exec {
 
+
+template<auto FN>
+struct Fn {};
+
+template<typename TASK_TYPE>
+struct Task {};
+
+
 template<typename REQ_SET,typename TASK>
 struct Launch {};
 
@@ -36,16 +44,27 @@ namespace cpu {
 
     };
 
-
-    template<typename REQ_SET, typename TASK>
+    template<typename TASK>
     struct Launch {
 
         template<typename CONTEXT>
         struct LaunchImpl {
-            
+
+            void operator()() {
+                typedef typename context::CreateContextType <
+                    typename CONTEXT::Info::Root,
+                    container::TypeSet<TASK>,
+                    typename CONTEXT::Info::Solver
+                >::type Ctx;
+
+                Ctx ctx;
+
+            }
+
         };
 
     };
+
 
 
 }
@@ -64,7 +83,6 @@ using CPULoop = context::SimpleModule <
     context::RequirementSet<platform::CPU>,
     context::ImplementationSet<Loop>
 >;
-
 
 
 

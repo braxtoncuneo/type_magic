@@ -57,7 +57,67 @@ namespace storage {
     };
 
 
+    namespace impl {
+        
+        namespace cpu {
+            template<typename PATH, typename VALUE_TYPE>
+            struct GlobalStaticMemberImpl {
+                VALUE_TYPE value;
+            };
+        }
 
+        namespace gpu {
+            template<typename PATH, typename VALUE_TYPE>
+            struct GlobalStaticMemberImpl {
+                VALUE_TYPE &value;
+            };
+            template<typename PATH, typename VALUE_TYPE>
+            struct SharedStaticMemberImpl {
+                VALUE_TYPE &value;
+            };
+            template<typename PATH, typename VALUE_TYPE>
+            struct PrivateStaticMemberImpl {
+                VALUE_TYPE value;
+            };
+        }
+
+    }
+
+    struct StorageModule {
+        template<typename TRAIT> struct ImplFor;
+
+        template<typename... PATH_ARGS, typename VALUE_TYPE>
+        struct ImplFor<StaticMember<Path<PATH_ARGS...>,cpu::Global,VALUE_TYPE>> {
+            typedef container::TypeMap<container::Binding<
+                impl::cpu::GlobalStaticMemberImpl<Path<PATH_ARGS...>,VALUE_TYPE>,
+                container::TypeSet<platform::CPU>
+            >> type;
+        };
+
+        template<typename... PATH_ARGS, typename VALUE_TYPE>
+        struct ImplFor<StaticMember<Path<PATH_ARGS...>,gpu::Global,VALUE_TYPE>> {
+            typedef container::TypeMap<container::Binding<
+                impl::gpu::GlobalStaticMemberImpl<Path<PATH_ARGS...>,VALUE_TYPE>,
+                container::TypeSet<platform::GPU>
+            >> type;
+        };
+
+        template<typename... PATH_ARGS, typename VALUE_TYPE>
+        struct ImplFor<StaticMember<Path<PATH_ARGS...>,gpu::Shared,VALUE_TYPE>> {
+            typedef container::TypeMap<container::Binding<
+                impl::gpu::SharedStaticMemberImpl<Path<PATH_ARGS...>,VALUE_TYPE>,
+                container::TypeSet<platform::GPU>
+            >> type;
+        };
+
+        template<typename... PATH_ARGS, typename VALUE_TYPE>
+        struct ImplFor<StaticMember<Path<PATH_ARGS...>,gpu::Private,VALUE_TYPE>> {
+            typedef container::TypeMap<container::Binding<
+                impl::gpu::PrivateStaticMemberImpl<Path<PATH_ARGS...>,VALUE_TYPE>,
+                container::TypeSet<platform::GPU>
+            >> type;
+        };
+    };
 
 }
 
