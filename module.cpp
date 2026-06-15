@@ -99,7 +99,8 @@ int main() {
         rootModule,
         container::TypeSet<
             isA,
-            isB
+            isB,
+            Bad
          >,
         Meta<context::EagerSolve>
     >::type Ctx;

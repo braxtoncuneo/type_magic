@@ -138,6 +138,50 @@ namespace type_set {
         typedef typename TYPE_SET::MapType::KeyArray::template Front<>::type type;
     };
 
+    template<typename ITEM>
+    struct HasItem {
+        template <typename TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_SET::template has_item<ITEM>();
+        };
+    };
+
+    template<typename TYPE_SET>
+    struct SharesItemWith {
+        static_assert(
+            IsTypeSet<TYPE_SET>::value,
+            ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+        );
+        template <typename OTHER_TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<OTHER_TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_SET::template Union<OTHER_TYPE_SET>::type::ITEM_COUNT > 0;
+        };
+    };
+
+    template<typename TYPE_SET>
+    struct Exclude {
+        static_assert(
+            IsTypeSet<TYPE_SET>::value,
+            ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+        );
+        template <typename OTHER_TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<OTHER_TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            typedef typename OTHER_TYPE_SET::template Difference<TYPE_SET>::type type;
+        };
+    };
+
 }
 
 
@@ -165,6 +209,18 @@ namespace type_map {
     struct BinaryCombine
     {
         typedef typename A::Combine<B>::type type;
+    };
+    
+    template<typename KEY>
+    struct HasKey {
+        template <typename TYPE_MAP>
+        struct Template {
+            static_assert(
+                IsTypeMap<TYPE_MAP>::value,
+                ASSERT_TEXT("ERROR: Only TypeMap specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_MAP::template has_key<KEY>();
+        };
     };
 
 }

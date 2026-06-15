@@ -56,7 +56,6 @@ namespace context {
                 container::TypeMap<>,container::TypeMap<container::Binding<IMPL,typename ReqSet::SetType>>
             >::template ItemAt<(size_t)TRAIT_VALID>::type type;
         };
-
     };
 
     template<typename TRAIT>
@@ -481,7 +480,7 @@ namespace context {
     struct Context;
 
     template<typename... ARGS>
-    struct ParentContext;
+    struct Super;
 
     template<typename TRAIT_MAP>
     struct TraitMapAsModuleBundle {
@@ -506,10 +505,54 @@ namespace context {
     };
 
 
+    template <typename...ARGS>
+    struct BaseContext;
+
+    template <typename...ARGS>
+    struct BaseContext <Context<ARGS...>> {
+        typedef Context<ARGS...> Type;
+        Type& ref;
+    };
+    
+
+    /*
+    template <typename...ARGS>
+    struct ContextIsSatisfiable;
+        
+    template <typename...ARGS>
+    struct ContextIsSatisfiable <Context<ARGS...>> {
+        template <typename ROOT>
+        struct DependencyCheck {
+            static constexpr bool SATISFIED = CreateContextType<ROOT,ARGS...>::Info::SATISFIED;
+        };
+    };
+    */
+
+
+
+    template <typename SELECTOR>
+    struct MutuallyExclude {
+
+        template <typename DEP_MAP>
+        struct Constraint {
+
+        };
+
+    };
+
+    template <typename SELECTOR>
+    struct Unify {
+
+        template <typename DEP_MAP>
+        struct Constraint {
+
+        };
+
+    };
+
 
     template <typename TRAIT_MAP, typename... COMPONENTS>
     struct Context <TRAIT_MAP,COMPONENTS...> : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
-        
         
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
 
@@ -521,7 +564,12 @@ namespace context {
         template<typename TRAIT>
         ComponentLookup<TRAIT>& as() {
             if constexpr (TRAIT_MAP::template has_key<TRAIT>()) {
-                return *static_cast<ComponentLookup<TRAIT>*>(this);
+                typedef ComponentLookup<TRAIT> COMPONENT;
+                if constexpr (Meta<BaseContext>::Generalizes<COMPONENT>::value) {
+                    return (*static_cast<ComponentLookup<TRAIT>*>(this)).ref.template as<TRAIT>();
+                } else {
+                    return *static_cast<ComponentLookup<TRAIT>*>(this);
+                }
             } else {
                 throw 1;
             }
@@ -533,15 +581,6 @@ namespace context {
         {}
         
     };
-
-
-    template<typename TRAIT_MAP,typename...COMPONENTS>
-    struct ParentContext <Context<TRAIT_MAP,COMPONENTS...>> {
-        //typedef Context<TRAIT_MAP,COMPONENTS...> ParentType;
-        //ParentType& parent_ref;
-    };
-
-
 
 
 
@@ -604,8 +643,9 @@ namespace context {
 
     };
 
-
 }
+
+
 
 template<
     typename TRAIT,
