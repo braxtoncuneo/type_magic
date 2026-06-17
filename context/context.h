@@ -528,8 +528,8 @@ namespace context {
         }
 
         template<typename... ARGS>
-        Context(ARGS... args)
-            : ARGS(args)...
+        Context(ARGS&&... args)
+            : ARGS(std::forward<ARGS>(args))...
         {}
         
     };

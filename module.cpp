@@ -4,6 +4,7 @@
 #include <vector>
 #include <cxxabi.h>
 
+
 #include "preamble.h"
 
 
@@ -21,53 +22,69 @@
 #include "postamble.h"
 
 
+#include <fstream>
 
 
 // Traits
-struct isA{};
-struct isB{};
-
-
-
+struct Log{};
+struct FindPrimes{};
 
 template<typename CONTEXT>
-struct A {
-    int x;
-    double &get_y() {
-        return via<isB>(this).y;
+struct PrimeFinder {
+    int min;
+    int max;
+    PrimeFinder(int min,int max) : min(min), max(max) {}
+    std::vector<int> find_primes() {
+        std::vector<int> result;
+        for (int i=min; i<=max; i++) {
+            bool is_prime = true;
+            for (int j=2; j<i; j++) {
+                if (i%j==0) {
+                    is_prime = false;
+                }
+            }
+            if (is_prime) {
+                result.push_back(i);
+                via<Log>(this) << i << '\n';
+            }
+        }
+        return result;
     }
 };
 
-using aModule = context::SimpleModule <
-    Meta<A>,
-    context::RequirementSet<>,
-    context::ImplementationSet<isA>
+using PrimeFindingModule = context::SimpleModule <
+    Meta<PrimeFinder>,
+    context::RequirementSet<Log>,
+    context::ImplementationSet<FindPrimes>
 >;
 
 
-template<typename CONTEXT>
-struct B {
-    double y;
-    int &get_x() {
-        return via<isA>(this).x;
+struct StdLog {
+
+    std::ofstream log_file;
+
+    StdLog(std::string path) : log_file(path) {}
+    StdLog() : StdLog("log.txt") {}
+    StdLog(StdLog &&) = default;
+
+    template<typename T>
+    StdLog& operator<<(T value) {
+        log_file << value;
+        return *this;
     }
 };
 
-
-using bModule = context::SimpleModule <
-    Meta<B>,
+using LogModule = context::SimpleModule <
+    StdLog,
     context::RequirementSet<>,
-    context::ImplementationSet<isB>
+    context::ImplementationSet<Log>
 >;
 
 typedef context::ModuleBundle<
-    aModule,
-    bModule
+    PrimeFindingModule,
+    LogModule
 > rootModule;
 
-
-struct Bad {};
-struct Worse {};
 
 
 template<typename CTX>
@@ -76,15 +93,11 @@ void run() {
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
-            As<isA,CTX>{1234},
-            As<isB,CTX>{5.67}
+            As<FindPrimes,CTX>{1,100},
+            As<Log,CTX>{"my_log.txt"}
         );
 
-        as<isA>(ctx).get_y() *= 2;
-        as<isB>(ctx).get_x() *= 4;
-
-        std::cout << as<isA>(ctx).x << std::endl;
-        std::cout << as<isB>(ctx).y << std::endl;
+        as<FindPrimes>(ctx).find_primes();
 
     } else {
         CTX ctx;
@@ -97,10 +110,7 @@ int main() {
     
     typedef typename context::CreateContextType<
         rootModule,
-        container::TypeSet<
-            isA,
-            isB
-         >,
+        container::TypeSet<FindPrimes>,
         Meta<context::EagerSolve>
     >::type Ctx;
 
