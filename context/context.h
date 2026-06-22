@@ -67,22 +67,36 @@ namespace context {
     > {};
 
 
-    /*
-    template<typename META_TRAIT, typename META_MODULE>
+    template<
+        template <typename...> typename TRAIT_TEMPLATE,
+        template <typename...> typename IMPL_TEMPLATE
+    >
     struct MetaModule {
         
-        template<typename TRAIT>
+        template<
+            typename TRAIT,
+            typename COMPONENT_TYPE=void,
+            typename REQUIREMENTS_TYPE=void
+        >
         struct ImplFor {
-            typedef container::TypeMap<>;
+            typedef container::TypeMap<> type;
         };
         
         template<typename... ARGS>
-        struct ImplFor <META_TRAIT<ARGS...>>{
-            typedef META_MODULE::Template<ARGS...>::ImplFor<META_TRAIT<ARGS...>>::type type;
+        struct ImplFor <
+            TRAIT_TEMPLATE<ARGS...>,
+            IMPL_TEMPLATE<ARGS...>::Component,
+            IMPL_TEMPLATE<ARGS...>::Requirements
+        >{
+            typedef container::TypeMap<
+                container::Binding<
+                    IMPL_TEMPLATE<ARGS...>::Component,
+                    IMPL_TEMPLATE<ARGS...>::Requirements
+                >
+            > type;
         };
 
     };
-    */
 
 
     template <typename... MODULES>
