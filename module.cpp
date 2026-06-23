@@ -25,65 +25,45 @@
 #include <fstream>
 
 
+
+
 // Traits
-struct Log{};
-struct FindPrimes{};
+struct XFloatField{};
+struct YIntField{};
 
-template<typename CONTEXT>
-struct PrimeFinder {
-    int min;
-    int max;
-    PrimeFinder(int min,int max) : min(min), max(max) {}
-    std::vector<int> find_primes() {
-        std::vector<int> result;
-        for (int i=min; i<=max; i++) {
-            bool is_prime = true;
-            for (int j=2; j<i; j++) {
-                if (i%j==0) {
-                    is_prime = false;
-                }
-            }
-            if (is_prime) {
-                result.push_back(i);
-                via<Log>(this) << i << '\n';
-            }
-        }
-        return result;
-    }
+
+
+
+
+
+struct A {
+    float x;
 };
 
-using PrimeFindingModule = context::SimpleModule <
-    Meta<PrimeFinder>,
-    context::RequirementSet<Log>,
-    context::ImplementationSet<FindPrimes>
->;
-
-
-struct StdLog {
-
-    std::ofstream log_file;
-
-    StdLog(std::string path) : log_file(path) {}
-    StdLog() : StdLog("log.txt") {}
-    StdLog(StdLog &&) = default;
-
-    template<typename T>
-    StdLog& operator<<(T value) {
-        log_file << value;
-        return *this;
-    }
-};
-
-using LogModule = context::SimpleModule <
-    StdLog,
+using AModule = context::SimpleModule <
+    A,
     context::RequirementSet<>,
-    context::ImplementationSet<Log>
+    context::ImplementationSet<XFloatField>
 >;
+
+struct B {
+    int y;
+};
+
+
+using BModule = context::SimpleModule <
+    B,
+    context::RequirementSet<>,
+    context::ImplementationSet<YIntField>
+>;
+
+
+
 
 typedef context::ModuleBundle<
-    PrimeFindingModule,
-    LogModule
-> rootModule;
+    AModule,
+    BModule
+> RootModule;
 
 
 
@@ -93,11 +73,12 @@ void run() {
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
-            As<FindPrimes,CTX>{1,100},
-            As<Log,CTX>{"my_log.txt"}
+            As<XFloatField,CTX>{45.67},
+            As<YIntField,CTX>{9876}
         );
 
-        as<FindPrimes>(ctx).find_primes();
+        std::cout << as<XFloatField>(ctx).x << std::endl;
+        std::cout << as<YIntField>(ctx).y << std::endl;
 
     } else {
         CTX ctx;
@@ -109,8 +90,8 @@ void run() {
 int main() {
     
     typedef typename context::CreateContextType<
-        rootModule,
-        container::TypeSet<FindPrimes>,
+        RootModule,
+        container::TypeSet<XFloatField,YIntField>,
         Meta<context::EagerSolve>
     >::type Ctx;
 
