@@ -67,6 +67,17 @@ namespace context {
     > {};
 
 
+    template<typename T, typename C=void, typename R=void>
+    struct IsMetaImpl {
+        :
+    }
+
+    template<typename T>
+    struct IsMetaImpl <T,T::Component,T:Requirements> {
+        static constexpr bool value = true;
+    };
+
+
     template<
         template <typename...> typename TRAIT_TEMPLATE,
         template <typename...> typename IMPL_TEMPLATE
@@ -85,13 +96,15 @@ namespace context {
         template<typename... ARGS>
         struct ImplFor <
             TRAIT_TEMPLATE<ARGS...>,
-            IMPL_TEMPLATE<ARGS...>::Component,
-            IMPL_TEMPLATE<ARGS...>::Requirements
-        >{
+            typename std::enable_if<AlwaysTrue<typename IMPL_TEMPLATE<ARGS...>::Component>::value>::type,
+            typename std::enable_if<AlwaysTrue<typename IMPL_TEMPLATE<ARGS...>::Requirements>::value>::type
+        > {
+            //static_assert(std::is_same<void,typename IMPL_TEMPLATE<ARGS...>::Component>::value,"BAD");
+            //static_assert(std::is_same<void,typename IMPL_TEMPLATE<ARGS...>::Requirements>::value,"BAD");
             typedef container::TypeMap<
                 container::Binding<
-                    IMPL_TEMPLATE<ARGS...>::Component,
-                    IMPL_TEMPLATE<ARGS...>::Requirements
+                    typename IMPL_TEMPLATE<ARGS...>::Component,
+                    typename IMPL_TEMPLATE<ARGS...>::Requirements
                 >
             > type;
         };
