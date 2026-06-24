@@ -5,7 +5,7 @@
 #include <cxxabi.h>
 #include <fstream>
 #include <sstream>
-#include "preamble.hpp"
+#include "preamble.h"
 
 #include "sanity_check.cpp"
 
@@ -68,6 +68,7 @@ struct StaticSaveInfoMeta
     {
         T field;
         std::fstream saveFile;
+            
 
         StaticSaveInfoComponent() : saveFile()
         {
@@ -98,8 +99,11 @@ struct StaticSaveInfoMeta
         }
     };
 
-    typedef Meta<StaticSaveInfoComponent> Component;
-    typedef container::TypeSet <SerDeInfo<T>> Requirements;
+    typedef context::SimpleModule <
+        Meta<StaticSaveInfoComponent>,
+        context::RequirementSet<SerDeInfo<T>>,
+        context::ImplementationSet<StaticSaveInfo<T>>
+    > Module;
 
 };
 
@@ -110,9 +114,13 @@ typedef context::MetaModule<
 > StaticSaveInfoModule;
 
 
-struct SerDeComponent
+template <typename T, typename ENABLE=void>
+struct SerDeComponent {};
+
+template <>
+struct SerDeComponent <std::string>
 {
-    struct GivenText
+    struct Component
     {
         std::string toString(std::string field)
         {
@@ -123,8 +131,19 @@ struct SerDeComponent
             return str;
         }
     };
-    template <typename T>
-    struct GivenArithmetic
+
+    typedef context::SimpleModule <
+        Component,
+        context::ImplementationSet<SerDeInfo<std::string>>
+    > Module;
+
+};
+
+
+template <typename T>
+struct SerDeComponent <T,typename std::enable_if<std::is_arithmetic<T>::value>::type>
+{
+    struct Component
     {
         std::string toString(T field)
         {
@@ -140,83 +159,57 @@ struct SerDeComponent
             return field;
         }
     };
-    template <typename T>
-    struct GivenVector
+
+    typedef context::SimpleModule <
+        Component,
+        context::ImplementationSet<SerDeInfo<T>>
+    > Module;
+
+};
+
+
+template <typename T>
+struct SerDeComponent <std::vector<T>>
+{
+    template <typename CONTEXT>
+    struct Component
     {
-        template <typename CONTEXT>
-        struct Component
+        std::string toString(std::vector<T> field)
         {
-            std::string toString(std::vector<T> field)
+            std::stringstream ss;
+            for (T item : field)
             {
-                std::stringstream ss;
-                for (T item : field)
-                {
-                    std::string convertedItem = via<SerDeInfo<T>>(this).toString(item);
-                    ss << item << " ";
-                }
-                return ss.str();
+                std::string convertedItem = via<SerDeInfo<T>>(this).toString(item);
+                ss << item << " ";
             }
-            std::vector<T> fromString(std::string str)
+            return ss.str();
+        }
+        std::vector<T> fromString(std::string str)
+        {
+            std::stringstream ss(str);
+            std::vector<T> field;
+            T item;
+            while (ss >> item)
             {
-                std::stringstream ss(str);
-                std::vector<T> field;
-                T item;
-                while (ss >> item)
-                {
-                    field.push_back(item);
-                }
-                return field;
+                field.push_back(item);
             }
-        };
+            return field;
+        }
     };
+
+    typedef context::SimpleModule <
+        Meta<Component>,
+        context::RequirementSet<SerDeInfo<T>>,
+        context::ImplementationSet<SerDeInfo<std::vector<T>>>
+    > Module;
+
 };
 
-template <typename TRAIT, typename T2 = void>
-struct SerDeModuleHelper
-{
-    typedef container::TypeMap<> type;
-};
 
-template <>
-struct SerDeModuleHelper<SerDeInfo<std::string>>
-{
-    typedef container::TypeMap<
-        container::Binding<
-            SerDeComponent::GivenText,
-            container::TypeSet<>
-        >
-    > type;
-};
-template <typename T>
-struct SerDeModuleHelper<SerDeInfo<T>, typename std::enable_if<std::is_arithmetic<T>::value>::type>
-{
-    typedef container::TypeMap<
-        container::Binding<
-            SerDeComponent::template GivenArithmetic<T>,
-            container::TypeSet<>
-        >
-    > type;
-};
-
-template <typename T>
-struct SerDeModuleHelper<SerDeInfo<std::vector<T>>>
-{
-    typedef container::TypeMap<
-        container::Binding<
-            Meta<SerDeComponent::template GivenVector<T>::template Component>,
-            container::TypeSet<SerDeInfo<T>>
-        >
-    > type;
-};
-
-struct SerDeModule
-{
-    template <typename TRAIT>
-    struct ImplFor
-    {
-        typedef typename SerDeModuleHelper<TRAIT>::type type;
-    };
-};
+typedef context::MetaModule<
+    SerDeInfo,
+    SerDeComponent
+> SerDeModule;
 
 template <typename CONTEXT>
 struct PrimeFinder
@@ -286,27 +279,6 @@ using LoggerModule = context::SimpleModule<
     Meta<Logger>,
     context::RequirementSet<>,
     context::ImplementationSet<isLogger>>;
-/*
-template <typename CONTEXT>
-struct B
-{
-    double y;
-    int &get_x()
-    {
-        return via<isA>(this).x;
-    }
-};
-
-using bModule = context::SimpleModule<
-    Meta<B>,
-    context::RequirementSet<>,
-    context::ImplementationSet<isB>>;
-
-typedef context::ModuleBundle<
-    aModule,
-    bModule>
-    rootModule;
-*/
 
 typedef context::ModuleBundle<
     primeFinderModule,

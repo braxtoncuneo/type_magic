@@ -42,6 +42,14 @@ namespace context {
         typedef container::TypeSet<IMPLEMENTATIONS...> SetType;
     };
 
+
+    struct EmptyModule {
+        template <typename TRAIT>
+        struct ImplFor {
+            typedef container::TypeMap<> type;
+        };
+    };
+
     template<typename IMPL, typename... ARGS>
     struct SimpleModule
     {
@@ -67,46 +75,42 @@ namespace context {
     > {};
 
 
-    template<typename T, typename C=void, typename R=void>
-    struct IsMetaImpl {
-        :
-    }
+    template<typename T, typename W=void>
+    struct IsModuleWrapper {
+        static constexpr bool value = false;
+    };
 
     template<typename T>
-    struct IsMetaImpl <T,T::Component,T:Requirements> {
+    struct IsModuleWrapper <T,typename AlwaysVoid<typename T::Module>::type> {
         static constexpr bool value = true;
     };
 
 
     template<
         template <typename...> typename TRAIT_TEMPLATE,
-        template <typename...> typename IMPL_TEMPLATE
+        template <typename...> typename MODULE_TEMPLATE
     >
     struct MetaModule {
         
         template<
             typename TRAIT,
-            typename COMPONENT_TYPE=void,
-            typename REQUIREMENTS_TYPE=void
+            typename ENABLE=void
         >
-        struct ImplFor {
-            typedef container::TypeMap<> type;
+        struct ModuleFor {
+            typedef EmptyModule type;
         };
         
         template<typename... ARGS>
-        struct ImplFor <
+        struct ModuleFor <
             TRAIT_TEMPLATE<ARGS...>,
-            typename std::enable_if<AlwaysTrue<typename IMPL_TEMPLATE<ARGS...>::Component>::value>::type,
-            typename std::enable_if<AlwaysTrue<typename IMPL_TEMPLATE<ARGS...>::Requirements>::value>::type
+            typename std::enable_if<IsModuleWrapper<MODULE_TEMPLATE<ARGS...>>::value>::type
         > {
-            //static_assert(std::is_same<void,typename IMPL_TEMPLATE<ARGS...>::Component>::value,"BAD");
-            //static_assert(std::is_same<void,typename IMPL_TEMPLATE<ARGS...>::Requirements>::value,"BAD");
-            typedef container::TypeMap<
-                container::Binding<
-                    typename IMPL_TEMPLATE<ARGS...>::Component,
-                    typename IMPL_TEMPLATE<ARGS...>::Requirements
-                >
-            > type;
+            typedef typename MODULE_TEMPLATE<ARGS...>::Module type;
+        };
+
+        template<typename TRAIT>
+        struct ImplFor {
+            typedef typename ModuleFor<TRAIT>::type::template ImplFor<TRAIT>::type type;
         };
 
     };
@@ -644,6 +648,8 @@ auto& as(context::Context<TRAIT_MAP,COMPONENTS...>& context) {
 }
 
 
+
+
 template<
     typename TRAIT,
     template<typename> typename START_COMP,
@@ -653,6 +659,10 @@ template<
 auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
     return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
 }
+
+
+
+
 
 
 template<typename TRAIT,typename CTX>
