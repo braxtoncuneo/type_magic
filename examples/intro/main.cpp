@@ -1,67 +1,51 @@
-#include "../../include.h"
+#include "../../include/include.h"
 
 #include <fstream>
 
-
 // Traits
-struct Log{};
-struct FindPrimes{};
+
+struct TraitX{};
+struct TraitY{};
+
+
+
+// Components
 
 template<typename CONTEXT>
-struct PrimeFinder {
-    int min;
-    int max;
-    PrimeFinder(int min,int max) : min(min), max(max) {}
-    std::vector<int> find_primes() {
-        std::vector<int> result;
-        for (int i=min; i<=max; i++) {
-            bool is_prime = true;
-            for (int j=2; j<i; j++) {
-                if (i%j==0) {
-                    is_prime = false;
-                }
-            }
-            if (is_prime) {
-                result.push_back(i);
-                via<Log>(this) << i << '\n';
-            }
-        }
-        return result;
+struct ComponentA {
+    int x;
+    float &get_y() {
+        return via<TraitY>(this).y;
     }
 };
 
-using PrimeFindingModule = context::SimpleModule <
-    Meta<PrimeFinder>,
-    context::RequirementSet<Log>,
-    context::ImplementationSet<FindPrimes>
->;
-
-
-struct StdLog {
-
-    std::ofstream log_file;
-
-    StdLog(std::string path) : log_file(path) {}
-    StdLog() : StdLog("log.txt") {}
-    StdLog(StdLog &&) = default;
-
-    template<typename T>
-    StdLog& operator<<(T value) {
-        log_file << value;
-        return *this;
+template<typename CONTEXT>
+struct ComponentB {
+    float y;
+    int &get_x() {
+        return via<TraitX>(this).x;
     }
 };
 
-using LogModule = context::SimpleModule <
-    StdLog,
-    context::RequirementSet<>,
-    context::ImplementationSet<Log>
+
+// Modules
+
+using ModuleA = context::SimpleModule <
+    Meta<ComponentA>,
+    context::RequirementSet<TraitY>,
+    context::ImplementationSet<TraitX>
 >;
 
-typedef context::ModuleBundle<
-    PrimeFindingModule,
-    LogModule
-> rootModule;
+using ModuleB = context::SimpleModule <
+    Meta<ComponentB>,
+    context::RequirementSet<TraitX>,
+    context::ImplementationSet<TraitY>
+>;
+
+using RootModule = context::ModuleBundle<
+    ModuleA,
+    ModuleB
+>;
 
 
 
@@ -71,11 +55,18 @@ void run() {
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
-            As<FindPrimes,CTX>{1,100},
-            As<Log,CTX>{"my_log.txt"}
+            As<TraitX,CTX>{1234},
+            As<TraitY,CTX>{56.78}
         );
 
-        as<FindPrimes>(ctx).find_primes();
+        std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
+        std::cout << "Y is: " << as<TraitY>(ctx).y << std::endl;
+
+        as<TraitY>(ctx).get_x() = 4321;
+        as<TraitX>(ctx).get_y() = 87.65;
+
+        std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
+        std::cout << "Y is: " << as<TraitY>(ctx).y << std::endl;
 
     } else {
         CTX ctx;
@@ -87,8 +78,8 @@ void run() {
 int main() {
     
     typedef typename context::CreateContextType<
-        rootModule,
-        container::TypeSet<FindPrimes>,
+        RootModule,
+        container::TypeSet<TraitX,TraitY>,
         Meta<context::EagerSolve>
     >::type Ctx;
 
