@@ -1,26 +1,4 @@
-#include <type_traits>
-#include <cassert>
-#include <stdexcept>
-#include <vector>
-#include <cxxabi.h>
-
-
-#include "preamble.h"
-
-
-#include "sanity_check.cpp"
-
-
-#include "config.h"
-
-
-#include "container/mod.h"
-#include "context/mod.h"
-#include "core/mod.h"
-
-
-#include "postamble.h"
-
+#include "../../include.h"
 
 #include <fstream>
 
