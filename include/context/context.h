@@ -203,7 +203,7 @@ namespace context {
         // Extract a combination of all implementation maps returned from the queries
         typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::BinaryCombine>::type NewImplMap;
         // Combine these mappings with the current implementation map
-        typedef typename IMPL_MAP::template Combine<NewImplMap>::type UpdatedImplMap;
+        typedef typename IMPL_MAP::template LossyCombine<NewImplMap>::type UpdatedImplMap;
 
         // Extract the union of all trait requirements listed by the newly-found impl maps
         typedef typename NewImplMap::template FoldItems<container::TypeSet<>,container::util::type_set::BinaryUnion>::type NewImplMapReqs;
@@ -543,6 +543,13 @@ namespace context {
         
         
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
+        typedef TRAIT_MAP TraitMap;
+
+
+        template <typename TRAIT>
+        static constexpr bool implements_trait () {
+            return TRAIT_MAP::template has_key<TRAIT>();
+        }
 
         template<typename TRAIT>
         using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
@@ -660,13 +667,17 @@ auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
     return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
 }
 
-
+template<typename TRAIT,typename CONTEXT>
+constexpr bool implements_trait() {
+    return CONTEXT::template implements_trait<TRAIT>();
+}
 
 
 
 
 template<typename TRAIT,typename CTX>
 using As = CTX::template ComponentLookup<TRAIT>;
+
 
 
 

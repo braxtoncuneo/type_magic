@@ -33,11 +33,13 @@ struct TaskA
     size_t limit;
 
     std::thread task;
+    
+    TaskA (size_t limit) : index(0), limit(limit) {}
 
     void run () {
         for (index=0; index < limit; index++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));        
             if constexpr ( implements_trait<ProgressRelay<ExecA>,CONTEXT>() ) {
-                std::cout << (index/(float)limit) << std::endl;
                 via<ProgressRelay<ExecA>>(this).progress = index/(float)limit;
             }
         }
@@ -45,8 +47,10 @@ struct TaskA
             via<ProgressRelay<ExecA>>(this).progress = 1;
         }
     }
-    
-    TaskA (size_t limit) : index(0), limit(limit), task(std::mem_fn(&TaskA::run),this) {}
+
+    void start() {
+        task = std::thread(std::mem_fn(&TaskA::run),this);
+    }
 
 };
 
@@ -67,12 +71,12 @@ struct TaskB
 
     std::thread task;
 
+    TaskB (size_t limit) : index(0), limit(limit) {}
+
     void run () {
         for (index=0; index < limit; index++) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));        
             if constexpr ( implements_trait<ProgressRelay<ExecB>,CONTEXT>() ) {
-                std::cout << (index/(float)limit) << std::endl;
-                std::cout << "Pointer at (TaskB): "<< static_cast<CONTEXT*>(this) << std::endl;
                 via<ProgressRelay<ExecB>>(this).progress = (index/(float)limit);
             }
         }
@@ -81,7 +85,9 @@ struct TaskB
         }
     }
 
-    TaskB (size_t limit) : index(0), limit(limit), task(std::mem_fn(&TaskB::run),this) {}
+    void start() {
+        task = std::thread(std::mem_fn(&TaskB::run),this);
+    }
 
 };
 
@@ -144,12 +150,11 @@ struct ProgressDisplayComponent {
     }
     
     template<typename T>
-    void display_recurse (unsigned int width) {
+    int display_recurse (unsigned int width) {
         if constexpr ( std::is_same<T,container::TypeSet<>>::value ) {
-            return;
+            return 0;
         } else {
             using CurrentLabel = typename T::MapType::HeadItemType;
-            std::cout << "Progress at (DisplayRecurse): "<< static_cast<CONTEXT*>(this) << std::endl;
             float progress = via<CurrentLabel>(this).progress;
             std::cout << "["; 
             for (unsigned int i=0; i<width; i++) {
@@ -159,8 +164,8 @@ struct ProgressDisplayComponent {
                     std::cout << " ";
                 }
             }
-            std::cout << "] " << progress << container::repr::type_name<CurrentLabel>() << std::endl; 
-            display_recurse<typename T::MapType::TailType::KeySet>(width);
+            std::cout << "] " << container::repr::type_name<CurrentLabel>() << std::endl; 
+            return display_recurse<typename T::MapType::TailType::KeySet>(width) + 1;
         }
     }
 
@@ -172,8 +177,8 @@ struct ProgressDisplayComponent {
 
     void display(unsigned int width) {
         typedef typename CONTEXT::TraitMap::KeySet::template Filter<Meta<ProgressRelay>::template Generalizes>::type RelaySet;
-        std::cout << "Pointer at display: "<< static_cast<CONTEXT*>(this) << std::endl;
-        return display_recurse<RelaySet>(width);
+        int bar_count = display_recurse<RelaySet>(width);
+        std::cout << "\x1b[" << bar_count << "A\r";
     }
 
 };
@@ -201,16 +206,18 @@ void run()
     {
 
         CTX ctx(
-            As<ExecA, CTX>{100},
-            As<ExecB, CTX>{100}
+            As<ExecA, CTX>{1000},
+            As<ExecB, CTX>{1000}
         );
 
 
-        std::cout << "Context is at " << &ctx << std::endl;
 
-        //while(! as<ProgressDisplay>(ctx).complete() ) {
-            as<ProgressDisplay>(ctx).display(10);
-        //}
+        as<ExecA>(ctx).start();
+        as<ExecB>(ctx).start();
+        
+        while (! as<ProgressDisplay>(ctx).complete() ) {
+            as<ProgressDisplay>(ctx).display(30);
+        }
 
         as<ExecA>(ctx).task.join();
         as<ExecB>(ctx).task.join();

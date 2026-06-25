@@ -1,39 +1,19 @@
-#include <type_traits>
-#include <cassert>
-#include <stdexcept>
-#include <vector>
-#include <cxxabi.h>
+#include "../../../include/include.h"
+
 #include <fstream>
 #include <sstream>
-#include "preamble.h"
 
-#include "sanity_check.cpp"
+struct PrimeFind{};
 
-#include "config.h"
-
-#include "container/mod.h"
-#include "context/mod.h"
-#include "core/mod.h"
-
-#include "postamble.h"
-
-struct isPrimeFinder
-{
-};
-
-struct isLogger
-{
-};
+struct Log{};
 
 template <typename T>
 struct StaticSaveInfo
-{
-};
+{};
 
 template <typename T>
 struct SerDeInfo
-{
-};
+{};
 
 
 template <typename T>
@@ -43,30 +23,30 @@ struct StaticSaveInfoMeta
     struct StaticSaveInfoComponent
     {
         T field;
-        std::fstream saveFile;
+        std::fstream save_file;
             
 
-        StaticSaveInfoComponent() : saveFile()
+        StaticSaveInfoComponent() : save_file()
         {
         }
         void save()
         {
-            saveFile.open(typeid(T).name(), std::ios::trunc | std::ios::out);
-            std::string saveInfo = via<SerDeInfo<T>>(this).toString(field);
-            saveFile << saveInfo << '\n';
-            saveFile.close();
+            save_file.open(typeid(T).name(), std::ios::trunc | std::ios::out);
+            std::string saveInfo = via<SerDeInfo<T>>(this).to_string(field);
+            save_file << saveInfo << '\n';
+            save_file.close();
         }
         T load()
         {
-            saveFile.open(typeid(T).name());
+            save_file.open(typeid(T).name());
             std::string loadString = "";
             std::string value;
-            while (saveFile >> value)
+            while (save_file >> value)
             {
                 loadString += value + " ";
             }
-            field = via<SerDeInfo<T>>(this).fromString(loadString);
-            saveFile.close();
+            field = via<SerDeInfo<T>>(this).from_string(loadString);
+            save_file.close();
             return field;
         }
     };
@@ -94,11 +74,11 @@ struct SerDeComponent <std::string>
 {
     struct Component
     {
-        std::string toString(std::string field)
+        std::string to_string(std::string field)
         {
             return field;
         }
-        std::string fromString(std::string str)
+        std::string from_string(std::string str)
         {
             return str;
         }
@@ -117,13 +97,13 @@ struct SerDeComponent <T,typename std::enable_if<std::is_arithmetic<T>::value>::
 {
     struct Component
     {
-        std::string toString(T field)
+        std::string to_string(T field)
         {
             std::stringstream ss;
             ss << field;
             return ss.str();
         }
-        T fromString(std::string str)
+        T from_string(std::string str)
         {
             std::stringstream ss(str);
             T field;
@@ -146,17 +126,16 @@ struct SerDeComponent <std::vector<T>>
     template <typename CONTEXT>
     struct Component
     {
-        std::string toString(std::vector<T> field)
+        std::string to_string(std::vector<T> field)
         {
             std::stringstream ss;
             for (T item : field)
             {
-                std::string convertedItem = via<SerDeInfo<T>>(this).toString(item);
                 ss << item << " ";
             }
             return ss.str();
         }
-        std::vector<T> fromString(std::string str)
+        std::vector<T> from_string(std::string str)
         {
             std::stringstream ss(str);
             std::vector<T> field;
@@ -187,13 +166,13 @@ template <typename CONTEXT>
 struct PrimeFinder
 {
 
-    std::vector<int> findPrimes(int min, int max)
+    std::vector<int> find_primes(int min, int max)
     {
         std::vector<int> primes;
-        if (via<isLogger>(this).returnFile.is_open())
+        if (via<Log>(this).returnFile.is_open())
         {
             int value;
-            while (via<isLogger>(this).returnFile >> value)
+            while (via<Log>(this).returnFile >> value)
             {
                 primes.push_back(value);
             }
@@ -212,7 +191,7 @@ struct PrimeFinder
             if (is_prime)
             {
                 primes.push_back(i);
-                via<isLogger>(this) << i << '\n';
+                via<Log>(this) << i << '\n';
             }
         }
         via<StaticSaveInfo<std::vector<int>>>(this).field = primes;
@@ -222,10 +201,11 @@ struct PrimeFinder
     }
 };
 
-using primeFinderModule = context::SimpleModule<
+using PrimeFinderModule = context::SimpleModule<
     Meta<PrimeFinder>,
-    context::RequirementSet<isLogger,StaticSaveInfo<std::vector<int>>>,
-    context::ImplementationSet<isPrimeFinder>>;
+    context::RequirementSet<Log,StaticSaveInfo<std::vector<int>>>,
+    context::ImplementationSet<PrimeFind>
+>;
 
 template <typename CONTEXT>
 struct Logger
@@ -250,14 +230,15 @@ struct Logger
 using LoggerModule = context::SimpleModule<
     Meta<Logger>,
     context::RequirementSet<>,
-    context::ImplementationSet<isLogger>>;
+    context::ImplementationSet<Log>
+>;
 
-typedef context::ModuleBundle<
-    primeFinderModule,
+using RootModule = context::ModuleBundle<
+    PrimeFinderModule,
     LoggerModule,
     StaticSaveInfoModule,
     SerDeModule
-> practiceRootModule;
+>;
 
 template <typename CTX>
 void run()
@@ -266,12 +247,12 @@ void run()
     if constexpr (CTX::Info::SATISFIED)
     {
 
-        CTX ctx(As<isLogger, CTX>{"log.txt"});
+        CTX ctx(As<Log, CTX>{"log.txt"});
 
         int saveValue = 42;
         as<StaticSaveInfo<int>>(ctx).field = saveValue;
         as<StaticSaveInfo<int>>(ctx).save();
-        as<isPrimeFinder>(ctx).findPrimes(1,100);
+        as<PrimeFind>(ctx).find_primes(1,100);
     }
 
     else
@@ -284,8 +265,8 @@ int main()
 {
 
     typedef typename context::CreateContextType<
-        practiceRootModule,
-        container::TypeSet<isPrimeFinder, StaticSaveInfo<int>>,
+        RootModule,
+        container::TypeSet<PrimeFind, StaticSaveInfo<int>>,
         Meta<context::EagerSolve>>::type Ctx;
 
     run<Ctx>();
