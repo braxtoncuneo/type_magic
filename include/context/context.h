@@ -42,6 +42,14 @@ namespace context {
         typedef container::TypeSet<IMPLEMENTATIONS...> SetType;
     };
 
+
+    struct EmptyModule {
+        template <typename TRAIT>
+        struct ImplFor {
+            typedef container::TypeMap<> type;
+        };
+    };
+
     template<typename IMPL, typename... ARGS>
     struct SimpleModule
     {
@@ -66,22 +74,45 @@ namespace context {
     > {};
 
 
-    /*
-    template<typename META_TRAIT, typename META_MODULE>
+    template<typename T, typename W=void>
+    struct IsModuleWrapper {
+        static constexpr bool value = false;
+    };
+
+    template<typename T>
+    struct IsModuleWrapper <T,typename AlwaysVoid<typename T::Module>::type> {
+        static constexpr bool value = true;
+    };
+
+
+    template<
+        template <typename...> typename TRAIT_TEMPLATE,
+        template <typename...> typename MODULE_TEMPLATE
+    >
     struct MetaModule {
         
-        template<typename TRAIT>
-        struct ImplFor {
-            typedef container::TypeMap<>;
+        template<
+            typename TRAIT,
+            typename ENABLE=void
+        >
+        struct ModuleFor {
+            typedef EmptyModule type;
         };
         
         template<typename... ARGS>
-        struct ImplFor <META_TRAIT<ARGS...>>{
-            typedef META_MODULE::Template<ARGS...>::ImplFor<META_TRAIT<ARGS...>>::type type;
+        struct ModuleFor <
+            TRAIT_TEMPLATE<ARGS...>,
+            typename std::enable_if<IsModuleWrapper<MODULE_TEMPLATE<ARGS...>>::value>::type
+        > {
+            typedef typename MODULE_TEMPLATE<ARGS...>::Module type;
+        };
+
+        template<typename TRAIT>
+        struct ImplFor {
+            typedef typename ModuleFor<TRAIT>::type::template ImplFor<TRAIT>::type type;
         };
 
     };
-    */
 
 
     template <typename... MODULES>
@@ -171,7 +202,7 @@ namespace context {
         // Extract a combination of all implementation maps returned from the queries
         typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::BinaryCombine>::type NewImplMap;
         // Combine these mappings with the current implementation map
-        typedef typename IMPL_MAP::template Combine<NewImplMap>::type UpdatedImplMap;
+        typedef typename IMPL_MAP::template LossyCombine<NewImplMap>::type UpdatedImplMap;
 
         // Extract the union of all trait requirements listed by the newly-found impl maps
         typedef typename NewImplMap::template FoldItems<container::TypeSet<>,container::util::type_set::BinaryUnion>::type NewImplMapReqs;
@@ -555,6 +586,13 @@ namespace context {
     struct Context <TRAIT_MAP,COMPONENTS...> : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
         
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
+        typedef TRAIT_MAP TraitMap;
+
+
+        template <typename TRAIT>
+        static constexpr bool implements_trait () {
+            return TRAIT_MAP::template has_key<TRAIT>();
+        }
 
         template<typename TRAIT>
         using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
@@ -576,8 +614,8 @@ namespace context {
         }
 
         template<typename... ARGS>
-        Context(ARGS... args)
-            : ARGS(args)...
+        Context(ARGS&&... args)
+            : ARGS(std::forward<ARGS>(args))...
         {}
         
     };
@@ -657,6 +695,8 @@ auto& as(context::Context<TRAIT_MAP,COMPONENTS...>& context) {
 }
 
 
+
+
 template<
     typename TRAIT,
     template<typename> typename START_COMP,
@@ -667,9 +707,17 @@ auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
     return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
 }
 
+template<typename TRAIT,typename CONTEXT>
+constexpr bool implements_trait() {
+    return CONTEXT::template implements_trait<TRAIT>();
+}
+
+
+
 
 template<typename TRAIT,typename CTX>
 using As = CTX::template ComponentLookup<TRAIT>;
+
 
 
 
