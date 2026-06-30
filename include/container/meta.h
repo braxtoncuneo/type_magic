@@ -116,6 +116,23 @@ struct Meta
 
 };
 
+namespace _util {
+
+template <typename TYPE>
+struct GetTemplateArgsHelper {
+    typedef container::TypeArray<> type;  
+};
+
+template <template <typename...> typename TEMPLATE, typename... ARGS>
+struct GetTemplateArgsHelper <TEMPLATE<ARGS...>> {
+    typedef container::TypeArray<ARGS...> type;  
+};
+
+}
+
+
+template<typename TYPE>
+using GetTemplateArgs = _util::GetTemplateArgsHelper<TYPE>::type;
 
 
 // Specializes the template provided
