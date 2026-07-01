@@ -4,6 +4,40 @@
 #include "../container/mod.h"
 
 #include <iostream>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
+template<typename TRAIT, typename TUPLE>
+struct Init {
+    typedef TRAIT Trait;
+    typedef TUPLE Tuple;
+
+    TUPLE args;
+
+    explicit Init(TUPLE&& args) : args(std::forward<TUPLE>(args)) {}
+    Init(Init const&) = delete;
+    Init& operator=(Init const&) = delete;
+    Init(Init&&) = default;
+    Init& operator=(Init&&) = delete;
+};
+
+template<typename TYPE>
+struct IsInit {
+    static constexpr bool value = false;
+};
+
+template<typename TRAIT, typename TUPLE>
+struct IsInit<Init<TRAIT,TUPLE>> {
+    static constexpr bool value = true;
+};
+
+template<typename TRAIT, typename... ARGS>
+auto init(ARGS&&... args) {
+    return Init<TRAIT,decltype(std::forward_as_tuple(std::forward<ARGS>(args)...))>(
+        std::forward_as_tuple(std::forward<ARGS>(args)...)
+    );
+}
 
 namespace context {
 
@@ -536,10 +570,55 @@ namespace context {
         };
     };
 
+    template<typename COMPONENT>
+    struct ContextComponent : COMPONENT {
+        ContextComponent() = default;
+
+        ContextComponent(COMPONENT const& component) : COMPONENT(component) {}
+
+        ContextComponent(COMPONENT&& component) : COMPONENT(std::move(component)) {}
+
+        template<
+            typename INIT,
+            typename ENABLE=typename std::enable_if<::IsInit<typename std::decay<INIT>::type>::value>::type
+        >
+        explicit ContextComponent(INIT&& init)
+            : ContextComponent(
+                std::forward<INIT>(init),
+                std::make_index_sequence<
+                    std::tuple_size<typename std::decay<INIT>::type::Tuple>::value
+                >{}
+            )
+        {}
+
+    private:
+        template<typename INIT, std::size_t... I>
+        ContextComponent(INIT&& init, std::index_sequence<I...>)
+            : COMPONENT(std::get<I>(std::forward<INIT>(init).args)...)
+        {}
+    };
+
+    template<
+        typename CONTEXT,
+        typename ARG,
+        bool IS_INIT=::IsInit<typename std::decay<ARG>::type>::value
+    >
+    struct ContextComponentForArg {
+        typedef ContextComponent<typename std::decay<ARG>::type> type;
+    };
+
+    template<typename CONTEXT, typename ARG>
+    struct ContextComponentForArg <CONTEXT,ARG,true> {
+        typedef typename std::decay<ARG>::type InitType;
+        typedef ContextComponent<typename CONTEXT::template ComponentLookup<typename InitType::Trait>> type;
+    };
+
 
 
     template <typename TRAIT_MAP, typename... COMPONENTS>
-    struct Context <TRAIT_MAP,COMPONENTS...> : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
+    struct Context <TRAIT_MAP,COMPONENTS...> :
+        ContextComponent<typename UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type>...
+    {
         
         
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
@@ -567,7 +646,7 @@ namespace context {
 
         template<typename... ARGS>
         Context(ARGS&&... args)
-            : ARGS(std::forward<ARGS>(args))...
+            : ContextComponentForArg<Self,ARGS>::type(std::forward<ARGS>(args))...
         {}
         
     };
