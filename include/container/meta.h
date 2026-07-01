@@ -79,6 +79,16 @@ template <typename DEFAULT, template <class...> class TEMPLATE, class... ARGS>
 using SpecializeOr = typename SpecializeOrFallBack<DEFAULT, void, TEMPLATE, ARGS...>::type;
 
 
+template<auto ARG, template<typename...> typename TEMPLATE = AlwaysVoid>
+struct IsTemplate {
+    static constexpr bool value = false;
+};
+
+template<template<typename...> typename TEMPLATE>
+struct IsTemplate<TEMPLATE,TEMPLATE> {
+    static constexpr bool value = true;
+};
+
 
 
 // Holds a template for later application

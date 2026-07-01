@@ -154,8 +154,8 @@ struct ProgressDisplayComponent {
         if constexpr ( std::is_same<T,container::TypeSet<>>::value ) {
             return 0;
         } else {
-            using CurrentLabel = typename T::MapType::HeadItemType;
-            float progress = via<CurrentLabel>(this).progress;
+            using CurrentTrait = typename T::MapType::HeadItemType;
+            float progress = via<CurrentTrait>(this).progress;
             std::cout << "["; 
             for (unsigned int i=0; i<width; i++) {
                 if ( (i/(float)width) <= progress ) {
@@ -164,6 +164,7 @@ struct ProgressDisplayComponent {
                     std::cout << " ";
                 }
             }
+            using CurrentLabel = GetTemplateArgs<CurrentTrait>::template ItemAt<0>::type;
             std::cout << "] " << container::repr::type_name<CurrentLabel>() << std::endl; 
             return display_recurse<typename T::MapType::TailType::KeySet>(width) + 1;
         }
@@ -242,7 +243,8 @@ int main() {
             ProgressRelay<ExecB>,
             ProgressDisplay
         >,
-        Meta<context::EagerSolve>>::type Ctx;
+        Meta<context::EagerSolve>
+    >::type Ctx;
 
     run<Ctx>();
 
