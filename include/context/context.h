@@ -194,14 +194,15 @@ namespace context {
 
         // Get a mapping of unqueried traits to the implementation maps returned for those traits
         typedef typename UnQueriedTraits::MapType::template MapItems<ROOT::template ImplFor>::type NewDepMap;
-
-        // Extract a mapping from all queried traits to their implementations
+       
+        //Extract a mapping from all queried traits to their implementations
         typedef typename NewDepMap::template MapItems<container::util::type_map::KeySet>::type NewTraitMap;
+
         // Combine this mapping with the current trait map
         typedef typename TRAIT_MAP::template Combine<NewTraitMap>::type UpdatedTraitMap;
 
         // Extract a combination of all implementation maps returned from the queries
-        typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::BinaryCombine>::type NewImplMap;
+        typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::MapOfSetsCombine>::type NewImplMap;
         // Combine these mappings with the current implementation map
         typedef typename IMPL_MAP::template LossyCombine<NewImplMap>::type UpdatedImplMap;
 

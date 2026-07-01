@@ -167,6 +167,12 @@ namespace type_map {
         typedef typename A::Combine<B>::type type;
     };
 
+    template <typename A, typename B>
+    struct MapOfSetsCombine
+    {
+        typedef typename A::template FoldCombine<B,type_set::BinaryUnion>::type type;
+    };
+
 }
 
 
@@ -455,6 +461,16 @@ struct TypeMap
         static constexpr bool duplicate_key = false;
     };
 
+    template <typename OTHER, template<typename,typename>typename FOLDER, typename ENABLE=void>
+    struct FoldCombine {
+        static_assert(
+            IsTypeMap<OTHER>::value,
+            "ERROR: FoldCombine operation can only occur between TypeMap specializations."
+        );
+        typedef OTHER type;
+        static constexpr bool duplicate_key = false;
+    };
+
     template <typename OTHER>
     struct Combine {
         typedef typename LossyCombine<OTHER>::type type;
@@ -659,6 +675,53 @@ struct TypeMap <HEAD,TAIL...>
         typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<HeadKeyType>())>::type
     > {
         typedef typename TailType::template LossyCombine<TypeMap<HEAD,ITEMS...>> TailCombine;
+        typedef typename TailCombine::type type;
+        static constexpr bool duplicate_key = TailCombine::duplicate_key;
+    };
+
+
+    template <typename OTHER, template<typename,typename>typename FOLDER, typename ENABLE=void>
+    struct FoldCombine {
+        static_assert(
+            IsTypeMap<OTHER>::value,
+            ASSERT_TEXT("ERROR: FoldCombine operation can only occur between TypeMap specializations.")
+        );
+    };
+
+
+    template <typename... ITEMS, template<typename,typename>typename FOLDER>
+    struct FoldCombine <
+        TypeMap<ITEMS...>,
+        FOLDER,
+        typename std::enable_if<TypeMap<ITEMS...>::template has_key<HeadKeyType>()>::type
+    > {
+        typedef TypeMap<ITEMS...> Other;
+        typedef HeadItemType OurItem;
+        typedef TypeMap<ITEMS...>::template ItemAt<HeadKeyType>::type TheirItem;
+        typedef FOLDER<OurItem,TheirItem>::type CombinedItem;
+
+        template<typename TYPE>
+        struct Mapper {
+            typedef TYPE type;
+        };
+
+        template<typename TYPE>
+        struct Mapper<Binding<HeadKeyType,TYPE>> {
+            typedef Binding<HeadKeyType,CombinedItem> type;
+        };
+
+        typedef typename Other::template Map<Mapper>::type ModifiedOther;
+        typedef typename TailType::template FoldCombine<ModifiedOther,FOLDER>::type type;
+        static constexpr bool duplicate_key = true;
+    };
+
+    template <typename... ITEMS, template<typename,typename>typename FOLDER>
+    struct FoldCombine <
+        TypeMap<ITEMS...>,
+        FOLDER,
+        typename std::enable_if<!(TypeMap<ITEMS...>::template has_key<HeadKeyType>())>::type
+    > {
+        typedef typename TailType::template FoldCombine<TypeMap<HEAD,ITEMS...>,FOLDER> TailCombine;
         typedef typename TailCombine::type type;
         static constexpr bool duplicate_key = TailCombine::duplicate_key;
     };
