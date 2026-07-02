@@ -517,9 +517,9 @@ namespace context {
         };
 
         template<typename... BINDINGS>
-        struct IsMapOverSets<TypeMap<BINDINGS...>> {
-            static constexpr bool value = TypeMap<BINDINGS...>
-                ::template FilterItems<Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
+        struct IsMapOverSets<container::TypeMap<BINDINGS...>> {
+            static constexpr bool value = container::TypeMap<BINDINGS...>
+                ::template FilterItems<container::util::Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
                 ::ITEM_COUNT != 0;
         };
 
@@ -554,16 +554,6 @@ namespace context {
         };
 
         template<typename TYPE, typename ENABLE=void>
-        struct IsTransform {
-            static constexpr bool value = false;
-        };
-
-        template<typename TYPE>
-        struct IsTransform <TYPE,typename std::enable_if<IsTemplate<Type::Transform>>::type> {
-            static constexpr bool value = true;
-        };
-
-        template<typename TYPE, typename ENABLE=void>
         struct HasTransformQueue {
             static constexpr bool value = false;
         };
@@ -578,7 +568,7 @@ namespace context {
         > {
             static constexpr bool value = TYPE::MapType
                 ::template FilterItems<
-                    Negate<Meta<container::TypeSet>::template Generalizes>::template Template
+                    container::util::Negate<Meta<container::TypeSet>::template Generalizes>::template Template
                 >::type
                 ::ITEM_COUNT != 0;
         };
@@ -611,19 +601,6 @@ namespace context {
         };
 
     }
-
-    template<typename ITERATION, typename ENABLE=void>
-    struct EvaluateTransform;
-   
-
-    template<typename ITERATION>
-    struct TransformChain <
-        ITERATION,
-        ITERATION::TransformArray
-    > {
-        typedef ITERATION::TransformArray::template ItemAt<0>::type 
-    };
-
 
 
 

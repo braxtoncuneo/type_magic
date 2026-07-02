@@ -4,155 +4,178 @@
 #include "context.h"
 
 
-namespace _util {
 
-    template<typename TYPE, typename KEY, typename ENABLE=void>
-    struct IsTypeMapWithKey {
-        static constexpr bool value = false;
-    };
 
-    template<typename... ARGS, typename KEY, typename ENABLE=void>
-    struct IsTypeMapWithKey <
-        TypeMap<ARGS...>,
-        KEY,
-        typename std::enable_if<TypeMap<ARGS...>::has_key<KEY>()>::type
+
+
+
+
+namespace tform {
+
+    struct RootModule{};
+    struct TraitMap{};
+    struct ImplMap{};
+    struct TransformQueue;
+
+    namespace _util {
+
+        template<typename TYPE, typename KEY, typename ENABLE=void>
+        struct IsTypeMapWithKey {
+            static constexpr bool value = false;
+        };
+
+        template<typename... ARGS, typename KEY, typename ENABLE=void>
+        struct IsTypeMapWithKey <
+            TypeMap<ARGS...>,
+            KEY,
+            typename std::enable_if<TypeMap<ARGS...>::has_key<KEY>()>::type
+        > {
+            static constexpr bool value = true;
+        };
+
+        template<typename TYPE, typename ENABLE=void>
+        struct HasRootModule {
+            static constexpr bool value = false;
+        };
+        
+        template<typename TYPE>
+        struct HasRootModule <
+            TYPE,
+            typename std::enable_if<IsTypeMapWithKey<TYPE,RootModule>>
+        > {
+            static constexpr bool value = IsModule<typename TYPE::template ItemAt<RootModule>::type>::value;
+        };
+
+        template<typename TYPE>
+        struct IsMapOverSets {
+            static constexpr bool value = false;
+        };
+
+        template<typename... BINDINGS>
+        struct IsMapOverSets<TypeMap<BINDINGS...>> {
+            static constexpr bool value = TypeMap<BINDINGS...>
+                ::template FilterItems<Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
+                ::ITEM_COUNT != 0;
+        };
+
+        template<typename TYPE, typename ENABLE=void>
+        struct HasTraitMap {
+            static constexpr bool value = false;
+        };
+        
+        template<typename TYPE>
+        struct HasTraitMap <
+            TYPE,
+            typename std::enable_if<IsTypeMapWithKey<TYPE,TraitMap>>
+        > {
+            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<TraitMap>::type>::value;
+        };
+
+        template<typename TYPE, typename ENABLE=void>
+        struct HasImplMap {
+            static constexpr bool value = false;
+        };
+        
+        template<typename TYPE>
+        struct HasImplMap <
+            TYPE,
+            typename std::enable_if<IsTypeMapWithKey<TYPE,ImplMap>>
+        > {
+            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<ImplMap>::type>::value;
+        };
+
+        template<typename TYPE, typename ENABLE=void>
+        struct HasTransformQueue {
+            static constexpr bool value = false;
+        };
+
+        template<typename TYPE>
+        struct HasTransformQueue <
+            TYPE,
+            typename std::enable_if<IsTypeMapWithKey<TYPE,TransformQueue>::value>::type
+        > {
+            static constexpr bool value = TYPE::MapType
+                ::template FilterItems<
+                    Negate<Meta<Meta>::template Generalizes>::template Template
+                >::type
+                ::ITEM_COUNT != 0;
+        };
+
+        template<typename TYPE, typename ENABLE=void>
+        struct IsTerminal {
+            static constexpr bool value = false;
+        };
+        
+        template<typename TYPE>
+        struct IsTerminal <
+            TYPE,
+            typename std::enable_if<HasTransformQueue<TYPE>::value>::type
+        > {
+            static constexpr bool value = TYPE::template ItemAt<TransformQueue>::MapType::ITEM_COUNT == 0;
+        };
+
+        template<typename TYPE>
+        struct TransformStateInfo {
+            static_assert(
+                Meta<container::TypeMap>::template Generalizes<TYPE>::value,
+                ASSERT_TEXT("Transform states must be TypeMap specializations.")
+            );
+            static_assert(
+                HasRootModule<TYPE>::value,
+                ASSERT_TEXT("Transform states must have tform::RootModule as a key, and the corresponding item must be a module.")
+            );
+            static_assert(
+                HasTraitMap<TYPE>::value,
+                ASSERT_TEXT("Transform states must have tform::TraitMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
+            );
+            static_assert(
+                HasTraitMap<TYPE>::value,
+                ASSERT_TEXT("Transform states must have tform::ImplMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
+            );
+            static_assert(
+                HasTransformQueue<TYPE>::value,
+                ASSERT_TEXT("Transform states must have tform::TransformQueue as a key, and the corresponding item must be a TypeArray with only Meta specializations as items.")
+            );
+            static constexpr bool IS_TERMINAL = IsTerminal<TYPE>::value;
+        };
+
+    }
+
+
+    template<typename STATE, typename ENABLE=void>
+    struct EvalTransform;
+
+    template<typename STATE>
+    struct EvalTransform <
+        STATE,
+        std::enable_if<IsTerminal<STATE>::value>::type
     > {
-        static constexpr bool value = true;
+        typedef _util::TransformStateInfo<STATE> Info;
+        typedef STATE type; 
     };
 
-
-    template<typename TYPE, typename ENABLE=void>
-    struct HasRootModule {
-        static constexpr bool value = false;
-    };
-    
-    template<typename TYPE>
-    struct HasRootModule <
-        TYPE,
-        typename std::enable_if<IsTypeMapWithKey<TYPE,RootModule>>
+    template<typename STATE>
+    struct EvalTransform <
+        STATE,
+        std::enable_if<IsTerminal<STATE>::value>::type
     > {
-        static constexpr bool value = IsModule<typename TYPE::template ItemAt<RootModule>::type>::value;
+        // Diagnostic information
+        typedef _util::TransformStateInfo<STATE> Info;
+        // The current transform queue, still containing the transform to be evaluated
+        typedef STATE::template ItemAt<TransformQueue>::type TransformQueue;
+        // The transform that will be evaluated in this iteration
+        typedef TransformQueue::template ItemAt<0>::type CurrentTransform;
+        // The updated transform queue, with the current transform removed
+        typedef TransformQueue::template PopFront<>::type UpdatedTransformQueue;
+        // The state that will be provided to the current transform
+        typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue> InputState;
+        // The result of the current transform
+        typedef CurrentTransform::template Template<InputState>::type NextState;
+        // The result of the rest of the transformations
+        typedef EvalTransform<NextState>::type type;  
     };
 
-    template<typename TYPE>
-    struct IsMapOverSets {
-        static constexpr bool value = false;
-    };
 
-    template<typename... BINDINGS>
-    struct IsMapOverSets<TypeMap<BINDINGS...>> {
-        static constexpr bool value = TypeMap<BINDINGS...>
-            ::template FilterItems<Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
-            ::ITEM_COUNT != 0;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct HasTraitMap {
-        static constexpr bool value = false;
-    };
-    
-    template<typename TYPE>
-    struct HasTraitMap <
-        TYPE,
-        typename AlwaysVoid<typename TYPE::TraitMap>::type
-    > {
-        static constexpr bool value = IsMapOverSets<typename TYPE::TraitMap>::value;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct HasImplMap {
-        static constexpr bool value = false;
-    };
-    
-    template<typename TYPE>
-    struct HasImplMap <TYPE,typename AlwaysVoid<typename TYPE::ImplMap>::type> {
-        static constexpr bool value = IsMapOverSets<typename TYPE::TraitMap>::value;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct HasDepMap {
-        static constexpr bool value = false;
-    };
-    
-    template<typename TYPE>
-    struct HasDepMap <TYPE,typename AlwaysVoid<typename TYPE::DepMap>::type> {
-        static constexpr bool value = HasTraitMap<TYPE>::value && HasImplMap<TYPE>::value;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct IsTransform {
-        static constexpr bool value = false;
-    };
-
-    template<typename TYPE>
-    struct IsTransform <TYPE,typename std::enable_if<IsTemplate<Type::Transform>>::type> {
-        static constexpr bool value = true;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct HasTransformQueue {
-        static constexpr bool value = false;
-    };
-
-    template<typename TYPE>
-    struct HasTransformQueue <
-        TYPE,
-        std::enable_if<
-            Meta<container::TypeArray>::template Generalizes<TYPE>::value,
-            typename AlwaysVoid<typename TYPE::TransformQueue>::type
-        >
-    > {
-        static constexpr bool value = TYPE::MapType
-            ::template FilterItems<
-                Negate<Meta<container::TypeSet>::template Generalizes>::template Template
-            >::type
-            ::ITEM_COUNT != 0;
-    };
-
-    template<typename TYPE, typename ENABLE=void>
-    struct IsTerminal {
-        static constexpr bool value = false;
-    };
-    
-    template<typename TYPE>
-    struct IsTerminal <TYPE,typename std::enable_if<HasTransformQueue<TYPE>::value>::type> {
-        static constexpr bool value = TYPE::TransformQueue::MapType::ITEM_COUNT == 0;
-    };
-
-    template<typename TYPE>
-    struct TransformIterInfo {
-        static_assert(
-            HasRootModule<TYPE>::value,
-            ASSERT_TEXT("Transform iterations must have a module named RootModule.")
-        );
-        static_assert(
-            HasDepMap<TYPE>::value,
-            ASSERT_TEXT("Transform iterations must have a type named DepMap which contains a TraitMap type and an ImplMap type.")
-        );
-        static_assert(
-            HasTransformQueue<TYPE>::value,
-            ASSERT_TEXT("Transform iterations must have a TypeArray named TransformQueue which contains only valid Transform types (defining a template<typename...> typename called Transform).")
-        );
-        static constexpr bool IS_TERMINAL         = IsTerminal<TYPE>::value;
-    };
-
-}
-
-template<typename ITERATION, typename ENABLE=void>
-struct EvaluateTransform;
-
-
-template<typename ITERATION>
-struct TransformChain <
-    ITERATION,
-    ITERATION::TransformArray
-> {
-    typedef ITERATION::TransformArray::template ItemAt<0>::type 
-};
-
-
-
-namespace transform {
 
     template <typename... ARGS>
     struct ComponentMutex;

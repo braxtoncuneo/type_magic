@@ -598,6 +598,14 @@ struct TypeMap
         typedef TypeMap<> type;
     };
 
+    template<typename KEY,typename NEW_ITEM>
+    struct UpdateItem {
+        static_assert(
+            AlwaysFalse<KEY>::value,
+            ASSERT_TEXT("Key does not exist in TypeMap.")
+        );
+    };
+
 };
 
 // Recursive case
@@ -819,6 +827,26 @@ struct TypeMap <HEAD,TAIL...>
             typedef typename FOLDER<A,typename B::KeyType>::type type;
         };
         typedef typename Fold<BASE,FoldAdapter>::type type;
+    };
+
+    template<typename KEY,typename NEW_ITEM>
+    struct UpdateItem {
+        static_assert(
+            has_key<KEY>(),
+            ASSERT_TEXT("Key does not exist in TypeMap.")
+        );
+
+        template <typename TYPE>
+        struct Modifier {
+            typedef TYPE type;
+        };
+
+        template <typename ITER_ITEM>
+        struct Modifier <Binding<KEY,ITER_ITEM>>{
+            typedef Binding<KEY,NEW_ITEM> type;
+        };
+
+        typedef typename TypeMap<HEAD, TAIL...>::template Map<Modifier>::type type;
     };
 
 
