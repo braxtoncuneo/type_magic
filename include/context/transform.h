@@ -1,12 +1,7 @@
 #ifndef HARMONIZE_CONTEXT_TRANSFORM
 #define HARMONIZE_CONTEXT_TRANSFORM
 
-#include "context.h"
-
-
-
-
-
+#include "module.h"
 
 
 
@@ -24,11 +19,11 @@ namespace tform {
             static constexpr bool value = false;
         };
 
-        template<typename... ARGS, typename KEY, typename ENABLE=void>
+        template<typename... ARGS, typename KEY>
         struct IsTypeMapWithKey <
-            TypeMap<ARGS...>,
+            container::TypeMap<ARGS...>,
             KEY,
-            typename std::enable_if<TypeMap<ARGS...>::has_key<KEY>()>::type
+            typename std::enable_if<container::TypeMap<ARGS...>::template has_key<KEY>()>::type
         > {
             static constexpr bool value = true;
         };
@@ -41,9 +36,9 @@ namespace tform {
         template<typename TYPE>
         struct HasRootModule <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,RootModule>>
+            typename std::enable_if<IsTypeMapWithKey<TYPE,RootModule>::value>::type
         > {
-            static constexpr bool value = IsModule<typename TYPE::template ItemAt<RootModule>::type>::value;
+            static constexpr bool value = context::IsModule<typename TYPE::template ItemAt<RootModule>::type>::value;
         };
 
         template<typename TYPE>
@@ -52,9 +47,9 @@ namespace tform {
         };
 
         template<typename... BINDINGS>
-        struct IsMapOverSets<TypeMap<BINDINGS...>> {
-            static constexpr bool value = TypeMap<BINDINGS...>
-                ::template FilterItems<Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
+        struct IsMapOverSets<container::TypeMap<BINDINGS...>> {
+            static constexpr bool value = container::TypeMap<BINDINGS...>
+                ::template FilterItems<container::util::Negate<Meta<container::TypeSet>::template Generalizes>::template Template>::type
                 ::ITEM_COUNT != 0;
         };
 
@@ -66,7 +61,7 @@ namespace tform {
         template<typename TYPE>
         struct HasTraitMap <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,TraitMap>>
+            typename std::enable_if<IsTypeMapWithKey<TYPE,TraitMap>::value>::type
         > {
             static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<TraitMap>::type>::value;
         };
@@ -79,7 +74,7 @@ namespace tform {
         template<typename TYPE>
         struct HasImplMap <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,ImplMap>>
+            typename std::enable_if<IsTypeMapWithKey<TYPE,ImplMap>::value>::type
         > {
             static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<ImplMap>::type>::value;
         };
@@ -96,7 +91,7 @@ namespace tform {
         > {
             static constexpr bool value = TYPE::MapType
                 ::template FilterItems<
-                    Negate<Meta<Meta>::template Generalizes>::template Template
+                    container::util::Negate<IsMeta>::template Template
                 >::type
                 ::ITEM_COUNT != 0;
         };
@@ -148,7 +143,7 @@ namespace tform {
     template<typename STATE>
     struct EvalTransform <
         STATE,
-        std::enable_if<IsTerminal<STATE>::value>::type
+        typename std::enable_if<_util::IsTerminal<STATE>::value>::type
     > {
         typedef _util::TransformStateInfo<STATE> Info;
         typedef STATE type; 
@@ -157,16 +152,16 @@ namespace tform {
     template<typename STATE>
     struct EvalTransform <
         STATE,
-        std::enable_if<IsTerminal<STATE>::value>::type
+        typename std::enable_if<!_util::IsTerminal<STATE>::value>::type
     > {
         // Diagnostic information
         typedef _util::TransformStateInfo<STATE> Info;
         // The current transform queue, still containing the transform to be evaluated
-        typedef STATE::template ItemAt<TransformQueue>::type TransformQueue;
+        typedef STATE::template ItemAt<TransformQueue>::type TformQueue;
         // The transform that will be evaluated in this iteration
-        typedef TransformQueue::template ItemAt<0>::type CurrentTransform;
+        typedef TformQueue::template ItemAt<0>::type CurrentTransform;
         // The updated transform queue, with the current transform removed
-        typedef TransformQueue::template PopFront<>::type UpdatedTransformQueue;
+        typedef TformQueue::template PopFront<>::type UpdatedTransformQueue;
         // The state that will be provided to the current transform
         typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue> InputState;
         // The result of the current transform
@@ -176,12 +171,12 @@ namespace tform {
     };
 
 
-
+    /*
     template <typename... ARGS>
     struct ComponentMutex;
   
     // Mutually excludes the existance of all selected components
-    template <typename template <typename...> SELECTOR>
+    template <template <typename...> SELECTOR>
     struct ComponentMutex <Meta<SELECTOR>>  {
 
         template <typename DEP_MAP>
@@ -193,7 +188,7 @@ namespace tform {
             struct ExcludeOthers {
 
                 typedef typename ExclusionSet::template Difference<ItemSet<TYPE>>::type LocalExclusionSet;
-                typedef typename DEP_MAP::ImplMap::template FilterKeys<Negate<LocalExclusionSet::template HasItem>>::type UpdatedImplMap;
+                typedef typename DEP_MAP::ImplMap::template FilterKeys<container::util::Negate<LocalExclusionSet::template HasItem>>::type UpdatedImplMap;
 
                 struct DepMap {
                     typedef typename DEP_MAP::TraitMap TraitMap;
@@ -249,6 +244,7 @@ namespace tform {
         };
 
     };
+    */
 
 }
 

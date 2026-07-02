@@ -116,6 +116,18 @@ struct Meta
 
 };
 
+
+template<typename TYPE>
+struct IsMeta {
+    static constexpr bool value = false;
+};
+
+template<template <typename...> typename TEMPLATE>
+struct IsMeta<Meta<TEMPLATE>> {
+    static constexpr bool value = true;
+};
+
+
 namespace _util {
 
 template <typename TYPE>
