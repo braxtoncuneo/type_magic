@@ -18,13 +18,26 @@ namespace context {
     };
 
 
-    template<
-        typename ROOT,
-        typename REQ_SET,
-        typename TRAIT_MAP=container::TypeMap<>,
-        typename IMPL_MAP=container::TypeMap<>
-    >
+    template<typename STATE,typename ENABLE=void>
     struct DepMapBuild {
+        static_assert(
+            container::IsTypeMap<STATE>::value,
+            ASSERT_TEXT("ERROR: STATE parameter must be a TypeMap.")
+        );
+    };
+    
+    template<typename...ARGS>
+    struct DepMapBuild <
+        container::TypeMap<ARGS...>,
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<tform::RequirementSet>::type::ITEM_COUNT!=0>::type
+    > {
+
+        typedef container::TypeMap<ARGS...> STATE;
+        typedef typename STATE::template ItemAt<tform::RootModule>::type     ROOT;
+        typedef typename STATE::template ItemAt<tform::RequirementSet>::type REQ_SET;
+        typedef typename STATE::template ItemAt<tform::TraitMap>::type       TRAIT_MAP;
+        typedef typename STATE::template ItemAt<tform::ImplMap>::type        IMPL_MAP;
+        typedef typename STATE::template ItemAt<tform::TransformQueue>::type TFORM_QUEUE;
 
         static_assert(
             container::IsTypeSet<REQ_SET>::value,
@@ -39,7 +52,7 @@ namespace context {
             ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
         );
         
-        typedef DepMapBuild<ROOT,REQ_SET,TRAIT_MAP,IMPL_MAP> SelfType;
+        typedef DepMapBuild<STATE> SelfType;
 
         template <typename TYPE>
         struct NotInOldTraits {
@@ -66,29 +79,40 @@ namespace context {
         typedef typename NewImplMap::template FoldItems<container::TypeSet<>,container::util::type_set::BinaryUnion>::type NewImplMapReqs;
         // Filter down set of traits to those that are not already listed in the updated trait map
         typedef typename NewImplMapReqs::template Difference<typename UpdatedTraitMap::KeySet>::type NewReqSet;
-    
+   
+        typedef TFORM_QUEUE::template PushFront<Meta<DepMapBuild>>::type UpdatedTformQueue;
+
+        typedef STATE::template UpdateItem<tform::RequirementSet,NewReqSet>::type
+                     ::template UpdateItem<tform::TraitMap,UpdatedTraitMap>::type
+                     ::template UpdateItem<tform::ImplMap,UpdatedImplMap>::type
+                     ::template UpdateItem<tform::TransformQueue,UpdatedTformQueue>::type
+                     type;
+
         // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
-        typedef DepMapBuild<ROOT,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
-        typedef typename NextIteration::FinalIteration FinalIteration;
-        typedef typename NextIteration::Result Result;
-        typedef typename Result::TraitMap TraitMap;
-        typedef typename Result::ImplMap  ImplMap;
+        //typedef DepMapBuild<ROOT,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
+        //typedef typename NextIteration::FinalIteration FinalIteration;
+        //typedef typename NextIteration::Result Result;
+        //typedef typename Result::TraitMap TraitMap;
+        //typedef typename Result::ImplMap  ImplMap;
     };
 
 
-    template <
-        typename ROOT,
-        typename TRAIT_MAP,
-        typename IMPL_MAP
-    >
-    struct DepMapBuild <ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP>
-    {
+    template<typename... ARGS>
+    struct DepMapBuild <
+        container::TypeMap<ARGS...>,
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<tform::RequirementSet>::type::ITEM_COUNT==0>::type
+    > {
+        typedef container::TypeMap<ARGS...> STATE;
+        typename STATE::template ItemAt<tform::RootModule>::type     ROOT;
+        typename STATE::template ItemAt<tform::TraitMap>::type       TRAIT_MAP;
+        typename STATE::template ItemAt<tform::ImplMap>::type        IMPL_MAP;
 
-        typedef DepMapBuild<ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP> SelfType;
-        typedef TRAIT_MAP TraitMap;
-        typedef IMPL_MAP  ImplMap;
-        typedef SelfType FinalIteration;
-        typedef DepMap<TraitMap,ImplMap> Result;
+        typedef DepMapBuild<STATE> SelfType;
+        typedef DepMapBuild<STATE> type;
+        //typedef TRAIT_MAP TraitMap;
+        //typedef IMPL_MAP  ImplMap;
+        //typedef SelfType FinalIteration;
+        //typedef DepMap<TraitMap,ImplMap> Result;
 
     };
 
@@ -524,7 +548,15 @@ namespace context {
     template<typename ROOT, typename REQS, typename SOLVER>
     struct CreateContextType {
 
-        typedef typename context::DepMapBuild<ROOT,REQS>::Result        DepMap;
+        typedef typename container::TypeMap<>
+                         ::template SetItem<tform::RootModule,ROOT>::type
+                         ::template SetItem<tform::RequirementSet,REQS>::type
+                         ::template SetItem<tform::TraitMap,container::TypeMap<>>::type
+                         ::template SetItem<tform::ImplMap,container::TypeMap<>>::type
+                         ::template SetItem<tform::TransformQueue,container::TypeArray<Meta<context::DepMapBuild>>>::type
+                         State;
+
+        typedef typename tform::EvalTransform<State>::type              DepMap;
         typedef typename context::Prune<DepMap>::Result                 PrunedDepMap;
         typedef          context::DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
         typedef typename ContextSolveGuard<Check::ALL_REQS_SATISFIED,ROOT,PrunedDepMap,Check,SOLVER>::type type;
@@ -574,30 +606,15 @@ using As = CTX::template ComponentLookup<TRAIT>;
 namespace container {
 namespace repr {
 
-    template<
-        typename ROOT,
-        typename REQ_SET,
-        typename TRAIT_MAP,
-        typename IMPL_MAP
-    > struct StringRepr <
-        context::DepMapBuild<
-            ROOT,
-            REQ_SET,
-            TRAIT_MAP,
-            IMPL_MAP
-        >
-    > {
+    template<typename STATE>
+    struct StringRepr <context::DepMapBuild<STATE>> {
 
-        typedef context::DepMapBuild<
-            REQ_SET,
-            TRAIT_MAP,
-            IMPL_MAP
-        > Type; 
+        typedef context::DepMapBuild<STATE> Type; 
         
         static StringReprNode repr_node() {
             return StringReprNode {
                 "DepMapBuild {",
-                StringContentRepr<TypeArray<REQ_SET,TRAIT_MAP,IMPL_MAP>>::repr(),
+                StringContentRepr<typename STATE::BindingArray>::repr(),
                 "}"
             };
         }

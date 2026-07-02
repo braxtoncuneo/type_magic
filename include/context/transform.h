@@ -10,7 +10,8 @@ namespace tform {
     struct RootModule{};
     struct TraitMap{};
     struct ImplMap{};
-    struct TransformQueue;
+    struct TransformQueue{};
+    struct RequirementSet{};
 
     namespace _util {
 
@@ -89,7 +90,7 @@ namespace tform {
             TYPE,
             typename std::enable_if<IsTypeMapWithKey<TYPE,TransformQueue>::value>::type
         > {
-            static constexpr bool value = TYPE::MapType
+            static constexpr bool value = TYPE
                 ::template FilterItems<
                     container::util::Negate<IsMeta>::template Template
                 >::type
@@ -106,7 +107,7 @@ namespace tform {
             TYPE,
             typename std::enable_if<HasTransformQueue<TYPE>::value>::type
         > {
-            static constexpr bool value = TYPE::template ItemAt<TransformQueue>::MapType::ITEM_COUNT == 0;
+            static constexpr bool value = TYPE::template ItemAt<TransformQueue>::type::MapType::ITEM_COUNT == 0;
         };
 
         template<typename TYPE>
@@ -154,20 +155,21 @@ namespace tform {
         STATE,
         typename std::enable_if<!_util::IsTerminal<STATE>::value>::type
     > {
+        static_assert(std::is_same<void,STATE>::value);
         // Diagnostic information
         typedef _util::TransformStateInfo<STATE> Info;
         // The current transform queue, still containing the transform to be evaluated
-        typedef STATE::template ItemAt<TransformQueue>::type TformQueue;
+        typedef typename STATE::template ItemAt<TransformQueue>::type TformQueue;
         // The transform that will be evaluated in this iteration
-        typedef TformQueue::template ItemAt<0>::type CurrentTransform;
+        typedef typename TformQueue::template ItemAt<0>::type CurrentTransform;
         // The updated transform queue, with the current transform removed
-        typedef TformQueue::template PopFront<>::type UpdatedTransformQueue;
+        typedef typename TformQueue::template PopFront<>::type UpdatedTransformQueue;
         // The state that will be provided to the current transform
-        typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue> InputState;
+        typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue>::type InputState;
         // The result of the current transform
-        typedef CurrentTransform::template Template<InputState>::type NextState;
+        typedef typename CurrentTransform::template Template<InputState>::Type NextState;
         // The result of the rest of the transformations
-        typedef EvalTransform<NextState>::type type;  
+        typedef typename EvalTransform<NextState>::type type;  
     };
 
 

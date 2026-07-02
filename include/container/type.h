@@ -606,6 +606,11 @@ struct TypeMap
         );
     };
 
+    template<typename KEY,typename ITEM>
+    struct SetItem {
+        typedef TypeMap<Binding<KEY,ITEM>> type;
+    };
+
 };
 
 // Recursive case
@@ -847,6 +852,27 @@ struct TypeMap <HEAD,TAIL...>
         };
 
         typedef typename TypeMap<HEAD, TAIL...>::template Map<Modifier>::type type;
+    };
+    
+    template<typename KEY,typename ITEM,typename ENABLE=void>
+    struct SetItem;
+   
+    template<typename KEY,typename ITEM>
+    struct SetItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<has_key<KEY>()>::type
+    > {
+        typedef UpdateItem<KEY,ITEM>::type type;
+    };
+   
+    template<typename KEY,typename ITEM>
+    struct SetItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<!has_key<KEY>()>::type
+    > {
+        typedef TypeMap<container::Binding<KEY,ITEM>,HEAD,TAIL...> type;
     };
 
 
