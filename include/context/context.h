@@ -18,7 +18,7 @@ namespace context {
     };
 
     template<typename STATE,typename ENABLE=void>
-    struct DepMapBuild {
+    struct Search {
         static_assert(
             container::IsTypeMap<STATE>::value,
             ASSERT_TEXT("ERROR: STATE parameter must be a TypeMap.")
@@ -30,7 +30,7 @@ namespace context {
     };
     
     template<typename...ARGS>
-    struct DepMapBuild <
+    struct Search <
         container::TypeMap<ARGS...>,
         typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::RequirementSet>::type::MapType::ITEM_COUNT!=0>::type
     > {
@@ -55,7 +55,7 @@ namespace context {
             ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
         );
         
-        typedef DepMapBuild<STATE> SelfType;
+        typedef Search<STATE> SelfType;
 
         template <typename TYPE>
         struct NotInOldTraits {
@@ -83,25 +83,21 @@ namespace context {
         // Filter down set of traits to those that are not already listed in the updated trait map
         typedef typename NewImplMapReqs::template Difference<typename UpdatedTraitMap::KeySet>::type NewReqSet;
    
-        typedef TFORM_QUEUE::template PushFront<Meta<DepMapBuild>>::type UpdatedTformQueue;
+        // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
+        typedef TFORM_QUEUE::template PushFront<Meta<Search>>::type UpdatedTformQueue;
 
+        // Update state field for next iteration
         typedef STATE::template UpdateItem<context::key::RequirementSet,NewReqSet>::type
                      ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
                      ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
                      ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
                      type;
 
-        // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
-        //typedef DepMapBuild<ROOT,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
-        //typedef typename NextIteration::FinalIteration FinalIteration;
-        //typedef typename NextIteration::Result Result;
-        //typedef typename Result::TraitMap TraitMap;
-        //typedef typename Result::ImplMap  ImplMap;
     };
 
 
     template<typename... ARGS>
-    struct DepMapBuild <
+    struct Search <
         container::TypeMap<ARGS...>,
         typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::RequirementSet>::type::MapType::ITEM_COUNT==0>::type
     > {
@@ -110,13 +106,8 @@ namespace context {
         typename STATE::template ItemAt<context::key::TraitMap>::type       TRAIT_MAP;
         typename STATE::template ItemAt<context::key::ImplMap>::type        IMPL_MAP;
 
-        typedef DepMapBuild<STATE> SelfType;
+        typedef Search<STATE> SelfType;
         typedef STATE type;
-        //typedef TRAIT_MAP TraitMap;
-        //typedef IMPL_MAP  ImplMap;
-        //typedef SelfType FinalIteration;
-        //typedef DepMap<TraitMap,ImplMap> Result;
-
     };
 
 
@@ -469,10 +460,10 @@ namespace context {
     
 
     template<typename STATE, typename ENABLE=void>
-    struct SolveGuard;
+    struct Reify;
    
     template<typename STATE>
-    struct SolveGuard <
+    struct Reify <
         STATE,
         typename std::enable_if<STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
     > {
@@ -497,7 +488,7 @@ namespace context {
     };
    
     template<typename STATE>
-    struct SolveGuard <
+    struct Reify <
         STATE,
         typename std::enable_if<! STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
     > {
@@ -516,10 +507,10 @@ namespace context {
     struct CreateContextType {
 
         typedef container::TypeArray<
-            Meta<context::DepMapBuild>,
-            Meta<context::Prune>,
-            Meta<context::Check>,
-            Meta<SolveGuard>
+            Meta<Search>,
+            Meta<Prune>,
+            Meta<Check>,
+            Meta<Reify>
         > TformQueue;
 
         typedef typename container::TypeMap<>
@@ -528,9 +519,9 @@ namespace context {
                          ::template SetItem<context::key::TraitMap,container::TypeMap<>>::type
                          ::template SetItem<context::key::ImplMap,container::TypeMap<>>::type
                          ::template SetItem<context::key::TransformQueue,TformQueue>::type
-                         InitialState;
+                         InputState;
 
-        typedef typename context::EvalTransform<InitialState>::type              State;
+        typedef typename context::EvalTransform<InputState>::type State;
 
         typedef typename State::template ItemAt<context::key::ContextType>::type type;
 
@@ -580,13 +571,13 @@ namespace container {
 namespace repr {
 
     template<typename STATE>
-    struct StringRepr <context::DepMapBuild<STATE>> {
+    struct StringRepr <context::Search<STATE>> {
 
-        typedef context::DepMapBuild<STATE> Type; 
+        typedef context::Search<STATE> Type; 
         
         static StringReprNode repr_node() {
             return StringReprNode {
-                "DepMapBuild {",
+                "Search {",
                 StringContentRepr<typename STATE::BindingArray>::repr(),
                 "}"
             };
