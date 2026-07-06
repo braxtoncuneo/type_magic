@@ -146,8 +146,13 @@ namespace tform {
         STATE,
         typename std::enable_if<_util::IsTerminal<STATE>::value>::type
     > {
+        static_assert(
+                container::IsTypeMap<STATE>::value,
+                ASSERT_TEXT("EvalTransform's parameter must be a TypeMap specialization.")
+        );
         typedef _util::TransformStateInfo<STATE> Info;
         typedef STATE type; 
+        typedef container::TypeArray<STATE> Sequence;
     };
 
     template<typename STATE>
@@ -155,7 +160,10 @@ namespace tform {
         STATE,
         typename std::enable_if<!_util::IsTerminal<STATE>::value>::type
     > {
-        static_assert(std::is_same<void,STATE>::value);
+        static_assert(
+                container::IsTypeMap<STATE>::value,
+                ASSERT_TEXT("EvalTransform's parameter must be a TypeMap specialization.")
+        );
         // Diagnostic information
         typedef _util::TransformStateInfo<STATE> Info;
         // The current transform queue, still containing the transform to be evaluated
@@ -167,9 +175,11 @@ namespace tform {
         // The state that will be provided to the current transform
         typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue>::type InputState;
         // The result of the current transform
-        typedef typename CurrentTransform::template Template<InputState>::Type NextState;
+        typedef typename CurrentTransform::template Template<InputState>::Type::type NextState;
         // The result of the rest of the transformations
         typedef typename EvalTransform<NextState>::type type;  
+        // The sequence of states that led to the result
+        typedef EvalTransform<NextState>::Sequence::template PushFront<STATE>::type Sequence;
     };
 
 
