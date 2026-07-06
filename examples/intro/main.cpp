@@ -79,8 +79,7 @@ int main() {
     
     typedef typename context::CreateContextType<
         RootModule,
-        container::TypeSet<TraitX,TraitY>,
-        Meta<context::EagerSolve>
+        container::TypeSet<TraitX,TraitY>
     >::type Ctx;
 
     run<Ctx>();

@@ -33,6 +33,7 @@ namespace impl {
 
 namespace cpu {
 
+/*
     template<typename CONTEXT>
     struct Loop{
 
@@ -65,25 +66,26 @@ namespace cpu {
 
     };
 
+*/
+
+}
+
+
+
+
+
 
 
 }
 
 
-
-
-
-
-
-}
-
-
+/*
 using CPULoop = context::SimpleModule <
     Meta<impl::cpu::Loop>,
     context::RequirementSet<platform::CPU>,
     context::ImplementationSet<Loop>
 >;
-
+*/
 
 
 

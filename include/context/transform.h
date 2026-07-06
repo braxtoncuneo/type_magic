@@ -2,18 +2,12 @@
 #define HARMONIZE_CONTEXT_TRANSFORM
 
 #include "module.h"
+#include "key.h"
 
 
+namespace context {
 
-namespace tform {
-
-    struct RootModule{};
-    struct TraitMap{};
-    struct ImplMap{};
-    struct TransformQueue{};
-    struct RequirementSet{};
-
-    namespace _util {
+    namespace check {
 
         template<typename TYPE, typename KEY, typename ENABLE=void>
         struct IsTypeMapWithKey {
@@ -37,9 +31,9 @@ namespace tform {
         template<typename TYPE>
         struct HasRootModule <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,RootModule>::value>::type
+            typename std::enable_if<IsTypeMapWithKey<TYPE,key::RootModule>::value>::type
         > {
-            static constexpr bool value = context::IsModule<typename TYPE::template ItemAt<RootModule>::type>::value;
+            static constexpr bool value = context::IsModule<typename TYPE::template ItemAt<key::RootModule>::type>::value;
         };
 
         template<typename TYPE>
@@ -62,9 +56,9 @@ namespace tform {
         template<typename TYPE>
         struct HasTraitMap <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,TraitMap>::value>::type
+            typename std::enable_if<IsTypeMapWithKey<TYPE,key::TraitMap>::value>::type
         > {
-            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<TraitMap>::type>::value;
+            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<key::TraitMap>::type>::value;
         };
 
         template<typename TYPE, typename ENABLE=void>
@@ -75,9 +69,9 @@ namespace tform {
         template<typename TYPE>
         struct HasImplMap <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,ImplMap>::value>::type
+            typename std::enable_if<IsTypeMapWithKey<TYPE,key::ImplMap>::value>::type
         > {
-            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<ImplMap>::type>::value;
+            static constexpr bool value = IsMapOverSets<typename TYPE::template ItemAt<key::ImplMap>::type>::value;
         };
 
         template<typename TYPE, typename ENABLE=void>
@@ -88,7 +82,7 @@ namespace tform {
         template<typename TYPE>
         struct HasTransformQueue <
             TYPE,
-            typename std::enable_if<IsTypeMapWithKey<TYPE,TransformQueue>::value>::type
+            typename std::enable_if<IsTypeMapWithKey<TYPE,key::TransformQueue>::value>::type
         > {
             static constexpr bool value = TYPE
                 ::template FilterItems<
@@ -107,7 +101,7 @@ namespace tform {
             TYPE,
             typename std::enable_if<HasTransformQueue<TYPE>::value>::type
         > {
-            static constexpr bool value = TYPE::template ItemAt<TransformQueue>::type::MapType::ITEM_COUNT == 0;
+            static constexpr bool value = TYPE::template ItemAt<key::TransformQueue>::type::MapType::ITEM_COUNT == 0;
         };
 
         template<typename TYPE>
@@ -118,19 +112,19 @@ namespace tform {
             );
             static_assert(
                 HasRootModule<TYPE>::value,
-                ASSERT_TEXT("Transform states must have tform::RootModule as a key, and the corresponding item must be a module.")
+                ASSERT_TEXT("Transform states must have context::key::RootModule as a key, and the corresponding item must be a module.")
             );
             static_assert(
                 HasTraitMap<TYPE>::value,
-                ASSERT_TEXT("Transform states must have tform::TraitMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
+                ASSERT_TEXT("Transform states must have context::key::TraitMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
             );
             static_assert(
                 HasTraitMap<TYPE>::value,
-                ASSERT_TEXT("Transform states must have tform::ImplMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
+                ASSERT_TEXT("Transform states must have context::key::ImplMap as a key, and the corresponding item must be a TypeMap with only TypeSet specializations as items.")
             );
             static_assert(
                 HasTransformQueue<TYPE>::value,
-                ASSERT_TEXT("Transform states must have tform::TransformQueue as a key, and the corresponding item must be a TypeArray with only Meta specializations as items.")
+                ASSERT_TEXT("Transform states must have context::key::TransformQueue as a key, and the corresponding item must be a TypeArray with only Meta specializations as items.")
             );
             static constexpr bool IS_TERMINAL = IsTerminal<TYPE>::value;
         };
@@ -144,13 +138,13 @@ namespace tform {
     template<typename STATE>
     struct EvalTransform <
         STATE,
-        typename std::enable_if<_util::IsTerminal<STATE>::value>::type
+        typename std::enable_if<check::IsTerminal<STATE>::value>::type
     > {
         static_assert(
                 container::IsTypeMap<STATE>::value,
                 ASSERT_TEXT("EvalTransform's parameter must be a TypeMap specialization.")
         );
-        typedef _util::TransformStateInfo<STATE> Info;
+        typedef check::TransformStateInfo<STATE> Info;
         typedef STATE type; 
         typedef container::TypeArray<STATE> Sequence;
     };
@@ -158,22 +152,22 @@ namespace tform {
     template<typename STATE>
     struct EvalTransform <
         STATE,
-        typename std::enable_if<!_util::IsTerminal<STATE>::value>::type
+        typename std::enable_if<!check::IsTerminal<STATE>::value>::type
     > {
         static_assert(
                 container::IsTypeMap<STATE>::value,
                 ASSERT_TEXT("EvalTransform's parameter must be a TypeMap specialization.")
         );
         // Diagnostic information
-        typedef _util::TransformStateInfo<STATE> Info;
+        typedef check::TransformStateInfo<STATE> Info;
         // The current transform queue, still containing the transform to be evaluated
-        typedef typename STATE::template ItemAt<TransformQueue>::type TformQueue;
+        typedef typename STATE::template ItemAt<key::TransformQueue>::type TformQueue;
         // The transform that will be evaluated in this iteration
         typedef typename TformQueue::template ItemAt<0>::type CurrentTransform;
         // The updated transform queue, with the current transform removed
         typedef typename TformQueue::template PopFront<>::type UpdatedTransformQueue;
         // The state that will be provided to the current transform
-        typedef STATE::template UpdateItem<TransformQueue,UpdatedTransformQueue>::type InputState;
+        typedef STATE::template UpdateItem<key::TransformQueue,UpdatedTransformQueue>::type InputState;
         // The result of the current transform
         typedef typename CurrentTransform::template Template<InputState>::Type::type NextState;
         // The result of the rest of the transformations
