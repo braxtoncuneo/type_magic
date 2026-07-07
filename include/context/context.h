@@ -235,8 +235,6 @@ namespace context {
     // Recursively searches for unsatisfiable traits/impls that are reacheable
     // from context requirements through a path consisting of only such 
     // unsatisfiable traits/impls.
-    //
-    // Provides diagnostics to show unsatisfiable elements
     template<typename STATE>
     struct UnsatRecurse {
 
@@ -309,23 +307,31 @@ namespace context {
     };
 
 
+    // Sets up and evaluates satisfiability checks through UnsatRecurse
+    //
+    // Provides diagnostics to show unsatisfiable elements
     template<typename STATE>
     struct Check {
         
+        // Get relevant fields from STATE
         typedef typename STATE::template ItemAt<context::key::RequirementSet>::type ReqSet;
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type       TraitMap;
         typedef typename STATE::template ItemAt<context::key::ImplMap>::type        ImplMap;
         typedef typename STATE::template ItemAt<context::key::UnprunedMap>::type    UnprunedMap;
         typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
+        // Set up filters to find unsatisfied traits/impls
         typedef typename container::util::Negate<TraitMap::template HasKey> TraitIsNotSat; 
         typedef typename container::util::Negate<ImplMap ::template HasKey> CompIsNotSat; 
         
+        // Find unsatisfied traits and implementations
         typedef typename UnprunedMap::TraitMap::template FilterKeys<TraitIsNotSat::template Template>::type UnsatTraitMap;
         typedef typename UnprunedMap::ImplMap::template  FilterKeys<CompIsNotSat ::template Template>::type  UnsatImplMap;
 
+        // Find the set of unsatisfied requirements
         typedef typename ReqSet::template Intersection<typename UnsatTraitMap::KeySet>::type TopLevelUnsatReqs;
         
+        // Set up the input for UnsatRecurse
         typedef typename STATE
                 ::template SetItem<context::key::unsat::Traits,typename UnsatTraitMap::KeySet>::type
                 ::template SetItem<context::key::unsat::Impls,typename UnsatImplMap::KeySet>::type
@@ -336,23 +342,24 @@ namespace context {
                 ::template SetItem<context::key::TransformQueue,container::TypeArray<Meta<UnsatRecurse>>>::type
                 UnsatStateInput;
 
+        // Evaluate UnsatRecurse
         typedef typename EvalTransform<UnsatStateInput>::type UnsatState;
         
+        // Get set of traits/impls that are both necessary an unsatisfied
         typedef typename UnsatState::template ItemAt<context::key::unsat::ReqTraits>::type ReqUnsatTraits;
         typedef typename UnsatState::template ItemAt<context::key::unsat::ReqImpls>::type  ReqUnsatImpls;
               
+        // Determine if anything necessary was unsatisfied
         static constexpr bool SOME_TRAITS_UNSATISFIED = UnsatTraitMap::ITEM_COUNT > 0;
         static constexpr bool SOME_IMPLS_UNSATISFIED  = UnsatImplMap::ITEM_COUNT > 0;
-        
         static constexpr bool ALL_REQS_SATISFIED   = (ReqUnsatTraits::MapType::ITEM_COUNT + ReqUnsatImpls::MapType::ITEM_COUNT) == 0;
 
+        // Update and return the state
         typedef typename UnsatState
                 ::template SetItem<context::key::CheckInfo,Check<STATE>>::type
                 ::template SetItem<context::key::TransformQueue,TformQueue>::type
                 type;
   
-
-        typedef type::template ItemAt<context::key::CheckInfo>::type double_check;
  
 
         template<typename TYPE_ARRAY>
@@ -424,27 +431,6 @@ namespace context {
         }
 
         static std::string unsat_diagnostic_string() {
-            /*
-            std::cout << "Pruned traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<TraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Pruned impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<ImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "Original traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename UnprunedMap::TraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Original impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename UnprunedMap::ImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "Unsat traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<UnsatTraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Unsat impls s:"<<std::endl;
-            std::cout<< container::repr::StringRepr<UnsatImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "ReqUnsat traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename ReqUnsat::TraitSet>::repr_node().to_string() << std::endl;
-            std::cout << "ReqUnsat impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename ReqUnsat::ImplSet>::repr_node().to_string() << std::endl;
-            
-            std::cout << "ReqUnsat impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename SolutionSequence<UnsatSearch>::Result>::repr_node().to_string() << std::endl;
-            */
             typedef typename ReqUnsatTraits::MapType::KeyArray TraitArray;
             typedef typename ReqUnsatImpls::MapType::KeyArray ImplArray;
             return unsat_trait_list_string<TraitArray>() + unsat_comp_list_string<ImplArray>();
