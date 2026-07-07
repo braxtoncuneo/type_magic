@@ -611,6 +611,11 @@ struct TypeMap
         typedef TypeMap<Binding<KEY,ITEM>> type;
     };
 
+    template<typename KEY, typename ITEM>
+    struct DefaultItem {
+        typedef TypeMap<Binding<KEY,ITEM>> type;
+    };
+
 };
 
 // Recursive case
@@ -868,6 +873,27 @@ struct TypeMap <HEAD,TAIL...>
    
     template<typename KEY,typename ITEM>
     struct SetItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<!has_key<KEY>()>::type
+    > {
+        typedef TypeMap<container::Binding<KEY,ITEM>,HEAD,TAIL...> type;
+    };
+    
+    template<typename KEY,typename ITEM,typename ENABLE=void>
+    struct DefaultItem;
+   
+    template<typename KEY,typename ITEM>
+    struct DefaultItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<has_key<KEY>()>::type
+    > {
+        typedef TypeMap<HEAD, TAIL...> type;
+    };
+   
+    template<typename KEY,typename ITEM>
+    struct DefaultItem <
         KEY,
         ITEM,
         typename std::enable_if<!has_key<KEY>()>::type

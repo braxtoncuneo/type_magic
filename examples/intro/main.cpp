@@ -76,11 +76,16 @@ void run() {
 }
 
 int main() {
-    
-    typedef typename context::CreateContextType<
-        RootModule,
-        container::TypeSet<TraitX,TraitY>
-    >::type Ctx;
+
+    using namespace container;   
+    using namespace context;   
+
+    typedef TypeMap<
+        Binding<key::RootModule,RootModule>,
+        Binding<key::RequirementSet,TypeSet<TraitX,TraitY>>
+    > InputState;
+
+    typedef typename context::CreateContextType<InputState>::type Ctx;
 
     run<Ctx>();
 
