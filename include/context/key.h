@@ -9,10 +9,18 @@ namespace key {
     struct TraitMap{};
     struct ImplMap{};
     struct UnprunedMap{};
+    struct UnculledMap{};
     struct TransformQueue{};
     struct RequirementSet{};
     struct CheckInfo{};
     struct ContextType{};
+
+    namespace cull {
+        struct ReqTraits{};
+        struct ReqImpls{};
+        struct ReqTraitFrontier{};
+        struct ReqImplFrontier{};
+    }
 
     namespace unsat {
         struct Traits{};

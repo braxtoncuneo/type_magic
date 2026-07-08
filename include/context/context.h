@@ -307,6 +307,85 @@ namespace context {
     };
 
 
+    template<typename STATE>
+    struct CullRecurse {
+
+        // Get relevant fields from STATE
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
+        typedef typename STATE::template ItemAt<context::key::UnculledMap>::type     UnculledMap;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraits>::type ReqTraits;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImpls>::type  ReqImpls;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraitFrontier>::type ReqTraitFrontier;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImplFrontier>::type  ReqImplFrontier;
+
+        // Add current frontier to the set of known traits
+        typedef typename ReqTraits::template Union<ReqTraitFrontier>::type UpdatedReqTraits;
+        typedef typename ReqImpls ::template Union<ReqImplFrontier> ::type UpdatedReqImpls;
+
+        // Create filters to find the new frontier
+        typedef typename container::util::Negate<UpdatedReqTraits::MapType::template HasKey> TraitIsNotKnown; 
+        typedef typename container::util::Negate<UpdatedReqImpls ::MapType::template HasKey> ImplIsNotKnown; 
+        
+        // Find next frontiers
+        typedef typename ReqTraitFrontier
+                ::template Map<UnculledMap::TraitMap::template ItemAt>::type // Lookup impls for each trait
+                ::template Fold<container::TypeSet<>,container::util::type_set::BinaryUnion>::type // Combine into a new set
+                ::template Filter<ImplIsNotKnown::template Template>::type // Filter out already-visited impls
+                UpdatedReqImplFrontier;
+        
+        typedef typename ReqImplFrontier
+                ::template Map<UnculledMap::ImplMap::template ItemAt>::type // Lookup traits for each impl
+                ::template Fold<container::TypeSet<>,container::util::type_set::BinaryUnion>::type // Combine into a new set
+                ::template Filter<TraitIsNotKnown::template Template>::type // Filter out already-visited traits
+                UpdatedReqTraitFrontier;
+              
+        // Determine if anything necessary was unsatisfied
+        static constexpr bool EMPTY_TRAIT_FRONTIER = UpdatedReqTraitFrontier::MapType::ITEM_COUNT == 0;
+        static constexpr bool EMPTY_IMPL_FRONTIER  = UpdatedReqImplFrontier::MapType::ITEM_COUNT == 0;
+        static constexpr bool EMPTY_FRONTIER = EMPTY_TRAIT_FRONTIER && EMPTY_IMPL_FRONTIER;
+
+        // Insert an additional CullRecurse if the new frontier is non-empty
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
+        typedef typename container::TypeArray <
+                typename TformQueue::template PushFront<Meta<CullRecurse>>::type,
+                TformQueue
+            >::ItemAt<EMPTY_FRONTIER>::type
+            UpdatedTformQueue;
+
+        // Return updated state
+        typedef typename STATE
+                ::template SetItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                ::template SetItem<context::key::cull::ReqTraits,UpdatedReqTraits>::type
+                ::template SetItem<context::key::cull::ReqImpls, UpdatedReqImpls>::type
+                ::template SetItem<context::key::cull::ReqTraitFrontier,UpdatedReqTraitFrontier>::type
+                ::template SetItem<context::key::cull::ReqImplFrontier, UpdatedReqImplFrontier>::type
+                type;
+
+    };
+
+
+    template<typename STATE>
+    struct Cull {
+
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type  ImplMap;
+        typedef DependencyMap<TraitMap,ImplMap> UnculledMap;
+
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
+        typedef typename TformQueue::template PushFront<Meta<CullRecurse>>::type     UpdatedTformQueue;
+
+        typedef typename STATE
+                ::template SetItem<context::key::UnculledMap,UnculledMap>::type
+                ::template SetItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                ::template SetItem<context::key::cull::ReqTraits,container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqImpls, container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqTraitFrontier,container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqImplFrontier, container::TypeSet<>>::type
+                type;
+    };
+
+
+
     // Sets up and evaluates satisfiability checks through UnsatRecurse
     //
     // Provides diagnostics to show unsatisfiable elements
@@ -361,9 +440,10 @@ namespace context {
                 type;
   
  
-
+        // Lists the types in the provided TYPE_ARRAY
         template<typename TYPE_ARRAY>
         static std::string type_list_string() {
+            // List is traversed recursively
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
                 return "[Nothing]";
             } else {
@@ -376,6 +456,7 @@ namespace context {
             }
         }
 
+        // Indicates that UNSAT_TRAIT is not implemented, and lists implementation candidates
         template<typename UNSAT_TRAIT>
         static std::string unsat_trait_diagnostic() {
             std::string trait_name = container::repr::type_name<UNSAT_TRAIT>();
@@ -388,6 +469,8 @@ namespace context {
             return result;
         }
 
+        // Indicates that UNSAT_COMP does not have all requirements satisfied, and lists
+        // the unsatisfied traits
         template<typename UNSAT_COMP>
         static std::string unsat_comp_diagnostic() {
             std::string comp_name = container::repr::type_name<UNSAT_COMP>();
@@ -399,7 +482,7 @@ namespace context {
             return result;
         }
 
-
+        // Prints diagnostic messages for each unsatisfied trait 
         template<typename TYPE_ARRAY>
         static std::string unsat_trait_list_string() {
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
@@ -415,6 +498,7 @@ namespace context {
             }
         }
 
+        // Prints diagnostic messages for each unsatisfied implementation
         template<typename TYPE_ARRAY>
         static std::string unsat_comp_list_string() {
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
@@ -429,7 +513,8 @@ namespace context {
                 return result; 
             }
         }
-
+        
+        // Print diagnostic messages for each unsatisfied trait/impl 
         static std::string unsat_diagnostic_string() {
             typedef typename ReqUnsatTraits::MapType::KeyArray TraitArray;
             typedef typename ReqUnsatImpls::MapType::KeyArray ImplArray;
@@ -446,6 +531,8 @@ namespace context {
     struct Context;
 
 
+    // Will eventually be used to allow contexts to contain other "parent"
+    // contexts as components.
     template <typename...ARGS>
     struct BaseContext;
 
@@ -456,7 +543,7 @@ namespace context {
     };
     
 
-
+    
     template <typename TRAIT_MAP, typename... COMPONENTS>
     struct Context <TRAIT_MAP,COMPONENTS...> : UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type... {
         
@@ -568,8 +655,12 @@ namespace context {
     struct CreateContextType {
 
         typedef container::TypeArray<
-            Meta<Search>,
+            Meta<Search>, // <- finds all directly reported dependencies
+            // Shim<X> <- adds elements/connections
+            // MutuallyExclude<X> <- removes connections
             Meta<Prune>,
+            Meta<Cull>, 
+            // Merge<X>
             Meta<Check>,
             Meta<Reify>
         > DefaultTformQueue;

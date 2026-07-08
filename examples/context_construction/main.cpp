@@ -61,7 +61,7 @@ using LogModule = context::SimpleModule <
 typedef context::ModuleBundle<
     PrimeFindingModule,
     LogModule
-> rootModule;
+> RootModule;
 
 
 
@@ -85,12 +85,16 @@ void run() {
 }
 
 int main() {
-    
-    typedef typename context::CreateContextType<
-        rootModule,
-        container::TypeSet<FindPrimes>,
-        Meta<context::EagerSolve>
-    >::type Ctx;
+
+    using namespace container;   
+    using namespace context;   
+
+    typedef TypeMap<
+        Binding<key::RootModule,RootModule>,
+        Binding<key::RequirementSet,TypeSet<FindPrimes>>
+    > InputState;
+
+    typedef typename context::CreateContextType<InputState>::type Ctx;
 
     run<Ctx>();
 
