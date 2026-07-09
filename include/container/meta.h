@@ -111,7 +111,7 @@ struct Meta
             container::IsTypeSet<TYPE_SET>::value,
             ASSERT_TEXT("ERROR: Only TypeSet specializations may be passed to Meta's SepecializeFromTypeSet member template.")
         );
-        typedef typename TYPE_SET::SpecializeWith<TEMPLATE>::type type;
+        typedef typename TYPE_SET::template SpecializeWith<TEMPLATE>::type type;
     };
 
 };

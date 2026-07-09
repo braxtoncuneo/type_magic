@@ -125,7 +125,7 @@ namespace type_set {
     template <typename A, typename B>
     struct BinaryUnion
     {
-        typedef typename A::Union<B>::type type;
+        typedef typename A::template Union<B>::type type;
     };
 
     template<typename TYPE_SET>
@@ -208,7 +208,7 @@ namespace type_map {
     template <typename A, typename B>
     struct BinaryCombine
     {
-        typedef typename A::Combine<B>::type type;
+        typedef typename A::template Combine<B>::type type;
     };
     
     template<typename KEY>
@@ -226,13 +226,13 @@ namespace type_map {
 }
 
 
-    template <template <typename> typename FUNC>
-    struct Negate {
-        template<typename TYPE>
-        struct Template {
-            static constexpr bool value = !FUNC<TYPE>::value;
-        };
+template <template <typename> typename FUNC>
+struct Negate {
+    template<typename TYPE>
+    struct Template {
+        static constexpr bool value = !FUNC<TYPE>::value;
     };
+};
 
 
 }
@@ -310,8 +310,8 @@ namespace repr {
         static_assert(IsTypeArray<TYPE>::value,"Only TypeArrays may be supplied.");
 
         static void repr_recurse(std::vector<StringReprNode> &result) {
-            result.push_back(StringRepr<typename TYPE::Front<>::type>::repr_node());
-            StringContentRepr<typename TYPE::PopFront<>::type>::repr_recurse(result);
+            result.push_back(StringRepr<typename TYPE::template Front<>::type>::repr_node());
+            StringContentRepr<typename TYPE::template PopFront<>::type>::repr_recurse(result);
         }
 
         static std::vector<StringReprNode> repr() {
@@ -762,7 +762,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<SELECTOR<HEAD>::value>::type
     > {
-        typedef typename TypeMap<HEAD>::Combine<typename TailType::Filter<SELECTOR>::type>::type type;
+        typedef typename TypeMap<HEAD>::template Combine<typename TailType::template Filter<SELECTOR>::type>::type type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -770,7 +770,7 @@ struct TypeMap <HEAD,TAIL...>
         SELECTOR,
         typename std::enable_if<!(SELECTOR<HEAD>::value)>::type
     > {
-        typedef typename TailType::Filter<SELECTOR>::type type;
+        typedef typename TailType::template Filter<SELECTOR>::type type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -973,6 +973,8 @@ struct TypeSet
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
     typedef TypeSet<ELEMENTS...> SelfType;
 
+    static constexpr size_t ITEM_COUNT = MapType::ITEM_COUNT;
+
     static_assert(
         !MapType::has_duplicate_key(),
         ASSERT_TEXT("TypeSet cannot contain duplicate items.")
@@ -1094,7 +1096,7 @@ struct TypeSet
     template <template<typename...> typename TEMPLATE>
     struct CollapseAll {
         typedef typename Filter<Meta<TEMPLATE>::template Generalizes>::type MatchingTypes;
-        typedef typename MatchingTypes::Map<SetFromArgs>::type ArgSets;
+        typedef typename MatchingTypes::template Map<SetFromArgs>::type ArgSets;
         typedef typename ArgSets::template Fold<TypeSet<>,util::type_set::BinaryUnion>::type CombinedSet;
         typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
     };

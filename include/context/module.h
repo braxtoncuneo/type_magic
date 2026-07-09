@@ -62,13 +62,17 @@ namespace context {
         };
     };
 
-    template<typename TRAIT>
-    struct TagTrait : SimpleModule <
-        TRAIT,
-        context::RequirementSet<>,
-        context::ImplementationSet<TRAIT>
-    > {};
-
+    template<typename TAG_TRAIT>
+    struct TagTrait {
+        template<typename TRAIT>
+        struct ImplFor {
+            static constexpr bool TRAIT_VALID = std::is_same<TAG_TRAIT,TRAIT>::value;
+            typedef typename container::TypeArray<
+                container::TypeMap<>,container::TypeMap<container::Binding<TAG_TRAIT,container::TypeSet<TAG_TRAIT>>>
+            >::template ItemAt<(size_t)TRAIT_VALID>::type type;
+        };
+    };
+   
 
     template<typename T, typename W=void>
     struct IsModuleWrapper {
@@ -134,7 +138,7 @@ namespace context {
                     container::IsTypeMap<ImplMap>::value,
                     ASSERT_TEXT("ERROR: A constituent of a ModuleBundle did not return a TypeMap from its ImplFor template.")
                 );
-                typedef typename A::LossyCombine<ImplMap> LossyCombo;
+                typedef typename A::template LossyCombine<ImplMap> LossyCombo;
                 typedef typename LossyCombo::type type;
                 static_assert(
                     !LossyCombo::duplicate_key,

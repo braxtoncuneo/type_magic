@@ -104,19 +104,52 @@ namespace context {
     };
 
 
+    namespace search {
+        template <typename IMPL, typename ENABLE=void>
+        struct HasTransform {
+            static constexpr bool value = false; 
+        };
+
+        template<typename IMPL>
+        struct HasTransform <IMPL,typename AlwaysVoid<Meta<IMPL::template Transform>>::type> {
+            static constexpr bool value = true;
+        };
+
+        template<typename IMPL>
+        struct GetTransform {
+            typedef Meta<IMPL::template Transform> type;
+        };
+    }
+
+
     // Handles the base case (empty frontier)
     template<typename... ARGS>
     struct Search <
         container::TypeMap<ARGS...>,
         typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::RequirementSet>::type::MapType::ITEM_COUNT==0>::type
     > {
-        typedef container::TypeMap<ARGS...> STATE;
-        typename STATE::template ItemAt<context::key::RootModule>::type     ROOT;
-        typename STATE::template ItemAt<context::key::TraitMap>::type       TRAIT_MAP;
-        typename STATE::template ItemAt<context::key::ImplMap>::type        IMPL_MAP;
+        typedef container::TypeMap<ARGS...> State;
+        typedef typename State::template ItemAt<context::key::RootModule>::type     Root;
+        typedef typename State::template ItemAt<context::key::TraitMap>::type       TraitMap;
+        typedef typename State::template ItemAt<context::key::ImplMap>::type        ImplMap;
+        typedef typename State::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
-        typedef Search<STATE> SelfType;
-        typedef STATE type;
+        typedef Search<State> SelfType;
+        
+        typedef typename ImplMap::KeySet
+                ::template Filter<search::HasTransform>::type
+                ::template Map<search::GetTransform>::type
+                ::MapType::KeyArray
+                UserTransforms;
+        
+        typedef typename UserTransforms
+                ::template Concatenate<TformQueue>::type
+                UpdatedTformQueue; 
+       
+        typedef typename State
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+
     };
 
     
@@ -197,7 +230,7 @@ namespace context {
         typedef typename container::TypeArray <
                 typename TformQueue::template PushFront<Meta<PruneRecurse>>::type,
                 TformQueue
-            >::ItemAt<NO_CHANGE>::type
+            >::template ItemAt<NO_CHANGE>::type
             UpdatedTformQueue;
 
         // Update the trait/impl maps and the transform queue
@@ -250,14 +283,14 @@ namespace context {
         typedef STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
 
         // Get mapping of all impls referenced in the trait frontier
-        typedef typename FrontierTraitSet::Map<TraitMap::template ItemAt>::type TraitFrontierImplSets;
+        typedef typename FrontierTraitSet::template Map<TraitMap::template ItemAt>::type TraitFrontierImplSets;
         // Convert the aformentioned mapping into a set
         typedef typename Meta<container::TypeSet<>::template Union>::SpecializeFromTypeSet<TraitFrontierImplSets>::type::type UnfilteredImplFrontier;
         // Filter down the set down to unreached impls
         typedef typename UnfilteredImplFrontier::template Intersection<UnsatImpls>::type::template Difference<ImplSet>::type UpdatedImplFrontier;
         
         // Get mapping of all traits referenced in the impl frontier
-        typedef typename FrontierImplSet::Map<ImplMap::template ItemAt>::type ImplFrontierTraitSets;
+        typedef typename FrontierImplSet::template Map<ImplMap::template ItemAt>::type ImplFrontierTraitSets;
         // Convert the aformentioned mapping into a set
         typedef typename Meta<container::TypeSet<>::template Union>::template SpecializeFromTypeSet<ImplFrontierTraitSets>::type::type UnfilteredTraitFrontier;
         // Filter down the set down to unreached traits
@@ -349,7 +382,7 @@ namespace context {
         typedef typename container::TypeArray <
                 typename TformQueue::template PushFront<Meta<CullRecurse>>::type,
                 TformQueue
-            >::ItemAt<EMPTY_FRONTIER>::type
+            >::template ItemAt<EMPTY_FRONTIER>::type
             UpdatedTformQueue;
 
         // Return updated state
@@ -672,6 +705,7 @@ namespace context {
                          InputState;
 
         typedef typename context::EvalTransform<InputState>::type State;
+        typedef typename context::EvalTransform<InputState>::Sequence Sequence;
 
         typedef typename State::template ItemAt<context::key::ContextType>::type type;
 

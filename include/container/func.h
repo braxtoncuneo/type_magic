@@ -47,7 +47,7 @@ struct Function <FUNC,TypeMap<BINDINGS...>>
                 AlwaysFalse<TypeIndex<INDEX>>::value,
                 "Function object invocation unrolling encountered an invalid parameter index."
             );
-            return UndefinedType();
+            return UndefinedType::value;
         }
     }
 

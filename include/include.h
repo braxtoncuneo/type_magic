@@ -4,7 +4,7 @@
 #include <vector>
 #include <cxxabi.h>
 
-#include "setup/preamble.h"
+#include "setup/preamble.hpp"
 
 #include "setup/config.h"
 
