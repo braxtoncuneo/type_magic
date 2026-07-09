@@ -3,12 +3,16 @@ CXXFLAGS := -std=c++20 -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=
 
 .PHONY: all clean
 
-all: init_check.exe existing_checks.exe
+all: init_check.exe field_check.exe existing_checks.exe
 	./init_check.exe
+	./field_check.exe
 	./existing_checks.exe
 
 init_check.exe: init_check.cpp ../include/include.h
 	$(CXX) init_check.cpp -o init_check.exe $(CXXFLAGS)
+
+field_check.exe: field_check.cpp ../include/include.h
+	$(CXX) field_check.cpp -o field_check.exe $(CXXFLAGS)
 
 existing_checks.exe: sanity_check.cpp module_check.cpp ../include/include.h
 	printf '%s\n' \
@@ -19,4 +23,4 @@ existing_checks.exe: sanity_check.cpp module_check.cpp ../include/include.h
 		| $(CXX) -x c++ - -o existing_checks.exe $(CXXFLAGS)
 
 clean:
-	rm -f init_check.exe existing_checks.exe
+	rm -f init_check.exe field_check.exe existing_checks.exe
