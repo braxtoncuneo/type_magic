@@ -55,8 +55,8 @@ void run() {
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
-            As<TraitX,CTX>{1234},
-            As<TraitY,CTX>{56.78}
+            init<TraitX>(1234),
+            init<TraitY>(56.78)
         );
 
         std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
