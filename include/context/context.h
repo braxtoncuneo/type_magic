@@ -52,11 +52,13 @@ namespace context {
         typedef IMPL_MAP  ImplMap;
     };
 
+
+
     // Expands the base trait/impl mappings, beginning with the traits in
     // STATE[keys::RequirementSet], then following trait->implementation
     // edges and implementation->requirement edges.
     template<typename STATE,typename ENABLE=void>
-    struct Search {
+    struct SearchRecurse {
         static_assert(
             container::IsTypeMap<STATE>::value,
             ASSERT_TEXT("ERROR: STATE parameter must be a TypeMap.")
@@ -71,55 +73,55 @@ namespace context {
     // Performs expansion in cases where the frontier of traits and implementations
     // is non-empty
     template<typename...ARGS>
-    struct Search <
+    struct SearchRecurse <
         container::TypeMap<ARGS...>,
-        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::RequirementSet>::type::MapType::ITEM_COUNT!=0>::type
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::search::TraitFrontier>::type::MapType::ITEM_COUNT!=0>::type
     > {
 
         // Access relevant information in transform state
         typedef container::TypeMap<ARGS...> STATE;
-        typedef typename STATE::template ItemAt<context::key::RootModule>::type     ROOT;
-        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type REQ_SET;
-        typedef typename STATE::template ItemAt<context::key::TraitMap>::type       TRAIT_MAP;
-        typedef typename STATE::template ItemAt<context::key::ImplMap>::type        IMPL_MAP;
-        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TFORM_QUEUE;
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type     Root;
+        typedef typename STATE::template ItemAt<context::key::search::TraitFrontier>::type Frontier;
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type       TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type        ImplMap;
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
         static_assert(
-            container::IsTypeSet<REQ_SET>::value,
-            ASSERT_TEXT("INTERNAL ERROR: REQ_SET parameter must be a TypeSet.")
+            container::IsTypeSet<Frontier>::value,
+            ASSERT_TEXT("INTERNAL ERROR: Frontier field must be a TypeSet.")
         );
         static_assert(
-            container::IsTypeMap<TRAIT_MAP>::value,
-            ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
+            container::IsTypeMap<TraitMap>::value,
+            ASSERT_TEXT("INTERNAL ERROR: TraitMap parameter must be a TypeMap.")
         );
         static_assert(
-            container::IsTypeMap<IMPL_MAP>::value,
-            ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
+            container::IsTypeMap<ImplMap>::value,
+            ASSERT_TEXT("INTERNAL ERROR: ImplMap parameter must be a TypeMap.")
         );
         
-        typedef Search<STATE> SelfType;
+        typedef SearchRecurse<STATE> SelfType;
 
         template <typename TYPE>
         struct NotInOldTraits {
-            static constexpr bool value = ! TRAIT_MAP::template has_key<TYPE>();
+            static constexpr bool value = ! TraitMap::template has_key<TYPE>();
         };
 
         // Get the set of required traits that have not yet been added to the trait map
-        typedef typename REQ_SET::template Filter<NotInOldTraits>::type UnQueriedTraits;
+        typedef typename Frontier::template Filter<NotInOldTraits>::type UnQueriedTraits;
 
         // Get a mapping of unqueried traits to the implementation maps returned for those traits
-        typedef typename UnQueriedTraits::MapType::template MapItems<ROOT::template ImplFor>::type NewDepMap;
+        typedef typename UnQueriedTraits::MapType::template MapItems<Root::template ImplFor>::type NewDepMap;
        
         //Extract a mapping from all queried traits to their implementations
         typedef typename NewDepMap::template MapItems<container::util::type_map::KeySet>::type NewTraitMap;
 
         // Combine this mapping with the current trait map
-        typedef typename TRAIT_MAP::template Combine<NewTraitMap>::type UpdatedTraitMap;
+        typedef typename TraitMap::template Combine<NewTraitMap>::type UpdatedTraitMap;
 
         // Extract a combination of all implementation maps returned from the queries
         typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::MapOfSetsCombine>::type NewImplMap;
         // Combine these mappings with the current implementation map
-        typedef typename IMPL_MAP::template LossyCombine<NewImplMap>::type UpdatedImplMap;
+        typedef typename ImplMap::template LossyCombine<NewImplMap>::type UpdatedImplMap;
 
         // Extract the union of all trait requirements listed by the newly-found impl maps
         typedef typename NewImplMap::template FoldItems<container::TypeSet<>,container::util::type_set::BinaryUnion>::type NewImplMapReqs;
@@ -127,10 +129,10 @@ namespace context {
         typedef typename NewImplMapReqs::template Difference<typename UpdatedTraitMap::KeySet>::type NewReqSet;
    
         // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
-        typedef TFORM_QUEUE::template PushFront<Meta<Search>>::type UpdatedTformQueue;
+        typedef TformQueue::template PushFront<Meta<SearchRecurse>>::type UpdatedTformQueue;
 
         // Update state field for next iteration
-        typedef STATE::template UpdateItem<context::key::RequirementSet,NewReqSet>::type
+        typedef STATE::template UpdateItem<context::key::search::TraitFrontier,NewReqSet>::type
                      ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
                      ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
                      ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
@@ -159,9 +161,9 @@ namespace context {
 
     // Handles the base case (empty frontier)
     template<typename... ARGS>
-    struct Search <
+    struct SearchRecurse <
         container::TypeMap<ARGS...>,
-        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::RequirementSet>::type::MapType::ITEM_COUNT==0>::type
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::search::TraitFrontier>::type::MapType::ITEM_COUNT==0>::type
     > {
         typedef container::TypeMap<ARGS...> State;
         typedef typename State::template ItemAt<context::key::RootModule>::type     Root;
@@ -169,7 +171,7 @@ namespace context {
         typedef typename State::template ItemAt<context::key::ImplMap>::type        ImplMap;
         typedef typename State::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
-        typedef Search<State> SelfType;
+        typedef SearchRecurse<State> SelfType;
         
         typedef typename ImplMap::KeySet
                 ::template Filter<search::HasTransform>::type
@@ -182,6 +184,23 @@ namespace context {
                 UpdatedTformQueue; 
        
         typedef typename State
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+
+    };
+    
+    template<typename STATE>
+    struct Search {
+
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type ReqSet;
+        
+        typedef typename TformQueue
+                ::template PushFront<Meta<SearchRecurse>>::type
+                UpdatedTformQueue; 
+       
+        typedef typename STATE
+                ::template SetItem<context::key::search::TraitFrontier,ReqSet>::type
                 ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
                 type;
 
@@ -309,6 +328,7 @@ namespace context {
         // Retrieve relevant fields from STATE
         typedef STATE::template ItemAt<context::key::TraitMap>::type        TraitMap;
         typedef STATE::template ItemAt<context::key::ImplMap>::type         ImplMap;
+        typedef STATE::template ItemAt<context::key::UnprunedMap>::type     Unpruned;
         typedef STATE::template ItemAt<key::unsat::Traits>::type            UnsatTraits;
         typedef STATE::template ItemAt<key::unsat::Impls>::type             UnsatImpls;
         typedef STATE::template ItemAt<key::unsat::ReqTraitFrontier>::type  FrontierTraitSet;
@@ -318,14 +338,14 @@ namespace context {
         typedef STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
 
         // Get mapping of all impls referenced in the trait frontier
-        typedef typename FrontierTraitSet::template Map<TraitMap::template ItemAt>::type TraitFrontierImplSets;
+        typedef typename FrontierTraitSet::template Map<Unpruned::TraitMap::template ItemAt>::type TraitFrontierImplSets;
         // Convert the aformentioned mapping into a set
         typedef typename Meta<container::TypeSet<>::template Union>::SpecializeFromTypeSet<TraitFrontierImplSets>::type::type UnfilteredImplFrontier;
         // Filter down the set down to unreached impls
         typedef typename UnfilteredImplFrontier::template Intersection<UnsatImpls>::type::template Difference<ImplSet>::type UpdatedImplFrontier;
         
         // Get mapping of all traits referenced in the impl frontier
-        typedef typename FrontierImplSet::template Map<ImplMap::template ItemAt>::type ImplFrontierTraitSets;
+        typedef typename FrontierImplSet::template Map<Unpruned::ImplMap::template ItemAt>::type ImplFrontierTraitSets;
         // Convert the aformentioned mapping into a set
         typedef typename Meta<container::TypeSet<>::template Union>::template SpecializeFromTypeSet<ImplFrontierTraitSets>::type::type UnfilteredTraitFrontier;
         // Filter down the set down to unreached traits
@@ -374,6 +394,26 @@ namespace context {
         };
     };
 
+    template<typename STATE>
+    struct CullFinalize {
+        typedef STATE::template ItemAt<context::key::TraitMap>::type                 TraitMap;
+        typedef STATE::template ItemAt<context::key::ImplMap>::type                  ImplMap;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraits>::type ReqTraits;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImpls>::type  ReqImpls;
+
+        typedef typename TraitMap::template FilterKeys<ReqTraits::template HasItem>::type UpdatedTraitMap;
+        typedef typename ImplMap ::template FilterKeys<ReqImpls ::template HasItem>::type UpdatedImplMap;
+
+        typedef typename STATE
+                ::template SetItem<context::key::TraitMap,UpdatedTraitMap>::type
+                ::template SetItem<context::key::ImplMap, UpdatedImplMap>::type
+                ::template RemoveItem<context::key::cull::ReqTraits>::type
+                ::template RemoveItem<context::key::cull::ReqImpls>::type
+                ::template RemoveItem<context::key::cull::ReqTraitFrontier>::type
+                ::template RemoveItem<context::key::cull::ReqImplFrontier>::type
+                type;
+    };
+
 
     template<typename STATE>
     struct CullRecurse {
@@ -416,7 +456,7 @@ namespace context {
         typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
         typedef typename container::TypeArray <
                 typename TformQueue::template PushFront<Meta<CullRecurse>>::type,
-                TformQueue
+                typename TformQueue::template PushFront<Meta<CullFinalize>>::type
             >::template ItemAt<EMPTY_FRONTIER>::type
             UpdatedTformQueue;
 
@@ -437,6 +477,7 @@ namespace context {
 
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type TraitMap;
         typedef typename STATE::template ItemAt<context::key::ImplMap>::type  ImplMap;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
         typedef DependencyMap<TraitMap,ImplMap> UnculledMap;
 
         typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
@@ -447,7 +488,7 @@ namespace context {
                 ::template SetItem<context::key::TransformQueue,UpdatedTformQueue>::type
                 ::template SetItem<context::key::cull::ReqTraits,container::TypeSet<>>::type
                 ::template SetItem<context::key::cull::ReqImpls, container::TypeSet<>>::type
-                ::template SetItem<context::key::cull::ReqTraitFrontier,container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqTraitFrontier,ReqSet>::type
                 ::template SetItem<context::key::cull::ReqImplFrontier, container::TypeSet<>>::type
                 type;
     };

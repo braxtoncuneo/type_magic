@@ -66,7 +66,7 @@ struct TraitImplMutex {
     
         typedef UncheckedImplSet::MapType::HeadKeyType      FallbackCandidate;
         typedef UncheckedImplSet::MapType::TailType::KeySet FallbackUnchecked;
-        typedef CheckedImplSet::template Union<container::TypeSet<Candidate>>::type FallbackChecked;
+        typedef CheckedImplSet::template Union<container::TypeSet<CandidateImpl>>::type FallbackChecked;
 
         typedef typename STATE
                 ::template SetItem<Candidate,FallbackCandidate>::type
@@ -86,7 +86,28 @@ struct TraitImplMutex {
         STATE,
         typename std::enable_if<STATE::template ItemAt<Unchecked>::type::ITEM_COUNT == 0>::type
     > {
-        typedef STATE type;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type  ImplMap;
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type TraitMap;
+        typedef typename STATE::template ItemAt<Candidate>::type CandidateImpl;
+        typedef typename STATE::template ItemAt<Checked>::type   CheckedImplSet;
+        typedef typename STATE::template ItemAt<Unchecked>::type UncheckedImplSet;
+        
+        typedef typename ImplMap::KeySet
+                ::template Filter<NotCandidateAndSelected<TraitMap,CandidateImpl>::template Filter>::type
+                ImplsToRemove;
+
+        typedef typename TraitMap
+                ::template MapItems<container::util::type_set::Exclude<ImplsToRemove>::template Template>::type
+                UpdatedTraitMap;
+
+        typedef typename ImplMap
+                ::template FilterKeys<container::util::Negate<ImplsToRemove::template HasItem>::template Template>::type
+                UpdatedImplMap;
+
+        typedef typename STATE
+                ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
+                ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
+                type;
     };
     
 
@@ -127,14 +148,21 @@ using MutexModule = context::MetaModule <TraitImplMutex,TraitImplMutex>;
 struct TraitX{};
 struct TraitY{};
 struct CPUOnly{};
+struct GPUOnly{};
 struct Platform{};
 struct GPU{};
 
+struct CircularTrait{};
 
+using CircularModule = context::SimpleModule <
+    CircularTrait,
+    context::RequirementSet<CircularTrait>,
+    context::ImplementationSet<CircularTrait>
+>;
 
 using GPUModule = context::SimpleModule <
     GPU,
-    context::RequirementSet<TraitImplMutex<Platform>>,
+    context::RequirementSet<TraitImplMutex<Platform>,CircularTrait>,
     context::ImplementationSet<Platform>
 >;
 
@@ -184,7 +212,8 @@ using RootModule = context::ModuleBundle<
     GPUModule,
     ModuleA,
     ModuleB,
-    MutexModule
+    MutexModule,
+    CircularModule
 >;
 
 
@@ -228,9 +257,7 @@ int main() {
     typedef typename context::CreateContextType<InputState> Creator;
     typedef typename Creator::type Ctx;
 
-    std::cout << container::repr::StringRepr<typename Creator::Sequence>::repr() << std::endl;
-
-    //run<Ctx>();
+    run<Ctx>();
 
     return 0;
 }

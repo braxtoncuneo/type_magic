@@ -15,6 +15,11 @@ namespace key {
     struct CheckInfo{};
     struct ContextType{};
 
+
+    namespace search {
+        struct TraitFrontier{};
+    };
+
     namespace cull {
         struct ReqTraits{};
         struct ReqImpls{};

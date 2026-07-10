@@ -437,6 +437,38 @@ namespace repr {
 ///////////////////////////////////////////////////////////////////////////////
 
 
+namespace util {
+
+    template <typename KEY>
+    struct _TypeTag {};
+
+    template <size_t INDEX,typename ITEM>
+    struct _IndexedTypeTag : _TypeTag<ITEM> {};
+
+    template <typename INDEX_PACK,typename... TYPES>
+    struct _TypePackInfoHelper;
+   
+    template <size_t... INDEXES, typename... TYPES>
+    struct _TypePackInfoHelper <
+        std::index_sequence<INDEXES...>,
+        TYPES...
+    > : _IndexedTypeTag<INDEXES,TYPES>...
+    {};
+
+    template <typename... TYPES>
+    struct TypePackInfo {
+        typedef _TypePackInfoHelper<std::make_index_sequence<sizeof...(TYPES)>,TYPES...> Helper;
+
+        template<typename QUERY>
+        static constexpr bool has_type() {
+            return std::is_base_of<_TypeTag<QUERY>,Helper>::value;
+        }
+
+        static constexpr bool has_duplicates = ! std::is_standard_layout<Helper>::value;
+    };
+
+
+}
 
 
 template<typename KEY, typename ITEM>
@@ -457,9 +489,24 @@ struct Binding
 };
 
 
+
+
+namespace type_map {
+    template <typename KEY, typename ITEM>
+    static Binding<KEY, ITEM> _lookup_helper(Binding<KEY, ITEM>) {}
+
+    template <typename KEY, typename... BINDINGS>
+    struct Lookup {
+        typedef typename decltype(_lookup_helper<KEY>(TypeMap<BINDINGS...>{}))::ItemType type;
+    };
+}
+
+
+
+
 // Base case
 template<typename... BINDINGS>
-struct TypeMap
+struct TypeMap 
 {
 
     typedef TypeSet  <>  KeySet;
@@ -632,11 +679,17 @@ struct TypeMap
         typedef TypeMap<Binding<KEY,ITEM>> type;
     };
 
+    template<typename KEY>
+    struct RemoveItem {
+        typedef TypeMap<> type;
+    };
+
 };
+
 
 // Recursive case
 template<typename HEAD, typename... TAIL>
-struct TypeMap <HEAD,TAIL...>
+struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
 {
 
     static_assert(
@@ -657,42 +710,28 @@ struct TypeMap <HEAD,TAIL...>
 
     static constexpr size_t ITEM_COUNT = TailType::ITEM_COUNT + 1;
 
+
+
     template<typename KEY>
     static constexpr bool has_key()
     {
-        if constexpr (std::is_same<KEY,HeadKeyType>::value) {
-            return true;
-        } else {
-            return TailType::template has_key<KEY>();
-        }
+        return util::TypePackInfo<typename HEAD::KeyType,typename TAIL::KeyType...>::template has_type<KEY>();
     }
 
     template<typename ITEM>
     static constexpr bool has_item()
     {
-        if constexpr (std::is_same<ITEM,HeadItemType>::value) {
-            return true;
-        } else {
-            return TailType::template has_item<ITEM>();
-        }
+        return util::TypePackInfo<typename HEAD::ItemType,typename TAIL::ItemType...>::template has_type<ITEM>();
     }
 
     static constexpr bool has_duplicate_key()
     {
-        if constexpr (TailType::template has_key<HeadKeyType>()) {
-            return true;
-        } else {
-            return TailType::has_duplicate_key();
-        }
+        return util::TypePackInfo<typename HEAD::KeyType,typename TAIL::KeyType...>::has_duplicates;
     }
 
     static constexpr bool has_duplicate_item()
     {
-        if constexpr (TailType::template has_item<HeadItemType>()) {
-            return true;
-        } else {
-            return TailType::has_duplicate_item();
-        }
+        return util::TypePackInfo<typename HEAD::ItemType,typename TAIL::ItemType...>::has_duplicates;
     }
 
     static_assert(
@@ -714,7 +753,7 @@ struct TypeMap <HEAD,TAIL...>
         KEY_QUERY,
         typename std::enable_if<!(std::is_same<HeadKeyType,KEY_QUERY>::value)>::type
     > {
-        typedef typename TailType::template ItemAt<KEY_QUERY>::type type;
+        typedef typename type_map::Lookup<KEY_QUERY,HEAD,TAIL...>::type type;
     };
 
     template <typename KEY_QUERY>
@@ -965,6 +1004,17 @@ struct TypeMap <HEAD,TAIL...>
     };
 
 
+    template<typename KEY>
+    struct RemoveItem {
+        template<typename TYPE>
+        struct IsNotKey {
+            static constexpr bool value = !std::is_same<TYPE,KEY>::value;
+        };
+
+        typedef SelfType::template Filter<IsNotKey>::type type;
+    };
+
+
     struct Invert {
         typedef typename TypeMap<Binding<HeadItemType,HeadKeyType>>::template LossyCombine<typename TailType::Invert::type>::type type;
     };
@@ -1162,6 +1212,11 @@ struct TypeSet
         typedef typename MatchingTypes::template Map<SetFromArgs>::type ArgSets;
         typedef typename ArgSets::template Fold<TypeSet<>,util::type_set::BinaryUnion>::type CombinedSet;
         typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
+    };
+    
+    template<typename KEY>
+    struct RemoveItem {
+        typedef MapType::template RemoveItem<KEY>::type::KeySet type;
     };
     
 };
