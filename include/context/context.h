@@ -813,12 +813,10 @@ namespace context {
     struct CreateContextType {
 
         typedef container::TypeArray<
-            Meta<Search>, // <- finds all directly reported dependencies
-            // Shim<X> <- adds elements/connections
-            // MutuallyExclude<X> <- removes connections
+            Meta<Search>,
+            // (user-provided transforms invoked here)
             Meta<Prune>,
             Meta<Cull>, 
-            // Merge<X>
             Meta<Check>,
             Meta<Reify>
         > DefaultTformQueue;
