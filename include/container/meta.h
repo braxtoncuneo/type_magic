@@ -144,7 +144,7 @@ struct GetTemplateArgsHelper <TEMPLATE<ARGS...>> {
 
 
 template<typename TYPE>
-using GetTemplateArgs = _util::GetTemplateArgsHelper<TYPE>::type;
+using GetTemplateArgs = typename _util::GetTemplateArgsHelper<TYPE>::type;
 
 
 // Specializes the template provided

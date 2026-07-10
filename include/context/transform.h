@@ -168,13 +168,13 @@ namespace context {
         // The updated transform queue, with the current transform removed
         typedef typename TformQueue::template PopFront<>::type UpdatedTransformQueue;
         // The state that will be provided to the current transform
-        typedef STATE::template UpdateItem<key::TransformQueue,UpdatedTransformQueue>::type InputState;
+        typedef typename STATE::template UpdateItem<key::TransformQueue,UpdatedTransformQueue>::type InputState;
         // The result of the current transform
         typedef typename CurrentTransform::template Template<InputState>::Type::type NextState;
         // The result of the rest of the transformations
         typedef typename EvalTransform<NextState>::type type;  
         // The sequence of states that led to the result
-        typedef EvalTransform<NextState>::Sequence::template PushFront<STATE>::type Sequence;
+        typedef typename EvalTransform<NextState>::Sequence::template PushFront<STATE>::type Sequence;
     };
 
 
