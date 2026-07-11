@@ -28,6 +28,7 @@ namespace key {
     }
 
     namespace unsat {
+        struct FailEarly{};
         struct Traits{};
         struct Impls{};
         struct ReqTraits{};

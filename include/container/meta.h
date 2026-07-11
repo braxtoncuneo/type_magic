@@ -11,7 +11,7 @@ struct AlwaysFalse
 template<typename T>
 struct AlwaysTrue
 {
-    static constexpr bool value = false;
+    static constexpr bool value = true;
 };
 
 template<typename T>

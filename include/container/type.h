@@ -229,6 +229,53 @@ namespace type_map {
         typedef typename A::template FoldCombine<B,type_set::BinaryUnion>::type type;
     };
 
+    template <typename MAP, typename ENABLE=void>
+    struct Sort;
+
+    template <typename HEAD, typename... TAIL>
+    struct Sort<
+        TypeMap<HEAD,TAIL...>,
+        typename std::enable_if<sizeof(typename HEAD::ItemType)>=sizeof(typename Sort<TypeMap<TAIL...>>::BiggestBinding::ItemType)>::type
+    > {
+        typedef HEAD BiggestBinding;
+        typedef TypeMap<TAIL...> Remainder;
+        typedef typename Sort<Remainder>::type RemainderSorted;
+        typedef typename TypeMap<BiggestBinding>::template LossyCombine<RemainderSorted>::type type;
+    };
+
+    template <typename HEAD, typename... TAIL>
+    struct Sort<
+        TypeMap<HEAD,TAIL...>,
+        typename std::enable_if<sizeof(typename HEAD::ItemType)<sizeof(typename Sort<TypeMap<TAIL...>>::BiggestBinding::ItemType)>::type
+    > {
+        typedef TypeMap<TAIL...> TailType;
+        typedef typename Sort<TailType>::BiggestBinding BiggestBinding;
+        typedef typename Sort<TailType>::Remainder      TailRemainder;
+        typedef typename TypeMap<HEAD>::template LossyCombine<TailRemainder>::type Remainder;
+        typedef typename Sort<Remainder>::type RemainderSorted;
+        typedef typename TypeMap<BiggestBinding>::template LossyCombine<RemainderSorted>::type type;
+    };
+
+
+    template <typename MAP, typename ENABLE=void>
+    struct DefaultStructOrder;
+
+    template <typename MAP>
+    struct DefaultStructOrder<
+        MAP,
+        typename std::enable_if<config::REORDER_STRUCT_MEMBERS>::type
+    > {
+        typedef typename Sort<MAP>::type type;
+    };
+
+    template <typename MAP>
+    struct DefaultStructOrder<
+        MAP,
+        typename std::enable_if<!config::REORDER_STRUCT_MEMBERS,typename AlwaysVoid<MAP>::type>::type
+    > {
+        typedef MAP type;
+    };
+
 }
 
 
@@ -499,6 +546,13 @@ namespace type_map {
     struct Lookup {
         typedef typename decltype(_lookup_helper<KEY>(TypeMap<BINDINGS...>{}))::ItemType type;
     };
+
+    
+    template <template<typename>typename MAPPER, typename... BINDINGS>
+    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input) {
+        return {};
+    };
+
 }
 
 
@@ -903,6 +957,7 @@ struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
 
     template <template<typename> typename MAPPER>
     struct Map {
+        //typedef TypeMap<typename MAPPER<HEAD>::type,typename MAPPER<TAIL>::type...> type;
         typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
     };
 
@@ -1025,52 +1080,6 @@ struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
         typedef typename TypeMap<Binding<HeadItemType,HeadKeyType>>::template LossyCombine<typename TailType::Invert::type>::type type;
     };
 
-    template <typename PHONEY=void, typename ENABLE=void>
-    struct Sort;
-
-    template <typename PHONEY>
-    struct Sort<
-        PHONEY,
-        typename std::enable_if<sizeof(HeadItemType)>=sizeof(typename TailType::template Sort<>::BiggestItem::ItemType),PHONEY>::type
-    > {
-        typedef HEAD     BiggestItem;
-        typedef TailType Remainder;
-        typedef typename Remainder::template Sort<>::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
-    };
-
-    template <typename PHONEY>
-    struct Sort<
-        PHONEY,
-        typename std::enable_if<sizeof(HeadItemType)<sizeof(typename TailType::template Sort<>::BiggestItem::ItemType),PHONEY>::type
-    > {
-        typedef typename TailType::template SortHelper<>::BiggestItem BiggestItem;
-        typedef typename TailType::template SortHelper<>::Remainder   TailRemainder;
-        typedef typename TypeMap<HEAD>::template LossyCombine<TailRemainder>::type Remainder;
-        typedef typename Remainder::template Sort<>::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
-    };
-
-
-
-    template <typename PHONEY=void, typename ENABLE=void>
-    struct DefaultStructOrder;
-
-    template <typename PHONEY>
-    struct DefaultStructOrder<
-        PHONEY,
-        typename std::enable_if<config::REORDER_STRUCT_MEMBERS,PHONEY>::type
-    > {
-        typedef typename Sort<PHONEY>::type type;
-    };
-
-    template <typename PHONEY>
-    struct DefaultStructOrder<
-        PHONEY,
-        typename std::enable_if<(!config::REORDER_STRUCT_MEMBERS),PHONEY>::type
-    > {
-        typedef TypeMap<HEAD,TAIL...> type;
-    };
 
 };
 

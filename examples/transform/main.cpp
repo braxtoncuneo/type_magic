@@ -3,12 +3,11 @@
 #include <fstream>
 
 
-// A generic trait/component which enforces a mutual exclusion between
-// components that implement TRAIT. This component has a Transform
-// template which iterates through the set of all components implementing
-// TRAIT, treating each as a candidate for implementing TRAIT. If all
-// requirements can be satisfied with all non-candidate implementors
-// of the trait removed, all non-candidate implementors are removed from
+// Defines a transform which enforces a mutual exclusion between
+// components that implement TRAIT. This transform iterates through the set
+// of all components implementing TRAIT, treating each as a candidate for
+// implementing TRAIT. If all requirements can be satisfied with all non-candidate
+// implementors of the trait removed, all non-candidate implementors are removed from
 // the dependency graph.
 template<typename TRAIT>
 struct TraitImplMutex {
@@ -29,6 +28,16 @@ struct TraitImplMutex {
             static constexpr bool value = implements_trait && ! std::is_same<IMPL,CANDIDATE>::value;
         };
     };
+
+    template<typename STATE>
+    struct Sanitize {
+        typedef typename STATE
+            ::template RemoveItem<Candidate>::type
+            ::template RemoveItem<Checked>::type
+            ::template RemoveItem<Unchecked>::type
+            type;
+    };
+
 
     // Checks each candidate implementation to see if it results in a
     // context with all requirements satisfied.
@@ -73,10 +82,15 @@ struct TraitImplMutex {
                 UpdatedImplMap;
 
         // Create an updated state with the candidate as the sole implementor
-        typedef typename STATE
+        typedef typename Sanitize<STATE>::type
                 ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
                 ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
+                ::template SetItem<context::key::unsat::FailEarly,AlwaysTrue<void>>::type
                 CandidateState;
+
+        typedef typename Sanitize<CandidateState>::type
+                ::template SetItem<context::key::unsat::FailEarly,AlwaysFalse<void>>::type
+                CandidateReturnState;
 
         // Evaluate the rest of the transform, and retrieve its diagnostic information
         typedef typename context::EvalTransform<CandidateState>::type
@@ -103,8 +117,9 @@ struct TraitImplMutex {
 
         // Gate between the candidate and fallback state by whether or not the
         // candidate succeeded.
-        typedef typename container::TypeArray<FallbackState,CandidateState>
-                ::template ItemAt<SATISFIED>::type type;
+        typedef typename container::TypeArray<FallbackState,CandidateReturnState>
+                ::template ItemAt<SATISFIED>::type
+                type;
     
     };
     
@@ -139,7 +154,7 @@ struct TraitImplMutex {
                 UpdatedImplMap;
 
         // Return the new state unconditionally, as it is the last resort.
-        typedef typename STATE
+        typedef typename Sanitize<STATE>::type
                 ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
                 ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
                 type;
@@ -170,27 +185,17 @@ struct TraitImplMutex {
         
     };
 
-    // A module serving the specialized version of TraitImplMutex
-    typedef context::SimpleModule<
-        TraitImplMutex<TRAIT>,
-        context::ImplementationSet<TraitImplMutex<TRAIT>>
-    > Module;
 };
-
-
-// The metamodule serving TraitImplMutex. Since the trait also serves
-// as its own implementor, it is supplied as both arguments.
-using MutexModule = context::MetaModule <TraitImplMutex,TraitImplMutex>;
 
 
 
 #include <iostream>
 
 // Two traits corresponding to log behaviour
-struct Log{};
+struct Log : TraitImplMutex<Log> {};
 struct FileLog{};
 struct PrintLog{};
-struct LogStyle{};
+struct LogStyle : TraitImplMutex<LogStyle> {};
 
 
 // Log text to a file
@@ -216,13 +221,13 @@ struct PrintLogImpl {
 
 using FileLogModule = context::SimpleModule <
     Meta<FileLogImpl>,
-    context::RequirementSet<TraitImplMutex<Log>,LogStyle>,
+    context::RequirementSet<LogStyle>,
     context::ImplementationSet<Log,FileLog>
 >;
 
 using PrintLogModule = context::SimpleModule <
     Meta<PrintLogImpl>,
-    context::RequirementSet<TraitImplMutex<Log>,LogStyle>,
+    context::RequirementSet<LogStyle>,
     context::ImplementationSet<Log,PrintLog>
 >;
 
@@ -242,13 +247,13 @@ struct ColoredLogStyle {
 
 using StandardLogStyleModule = context::SimpleModule <
     StandardLogStyle,
-    context::RequirementSet<TraitImplMutex<LogStyle>,Log>,
+    context::RequirementSet<Log>,
     context::ImplementationSet<LogStyle,StandardLogStyle>
 >;
 
 using ColoredLogStyleModule = context::SimpleModule <
     ColoredLogStyle,
-    context::RequirementSet<TraitImplMutex<LogStyle>,PrintLog,Log>,
+    context::RequirementSet<PrintLog,Log>,
     context::ImplementationSet<LogStyle,ColoredLogStyle>
 >;
 
@@ -260,8 +265,7 @@ using RootModule = context::ModuleBundle<
     FileLogModule,
     PrintLogModule,
     StandardLogStyleModule,
-    ColoredLogStyleModule,
-    MutexModule
+    ColoredLogStyleModule
 >;
 
 
@@ -295,7 +299,7 @@ int main() {
     typedef typename BaseInputState
             ::template SetItem<key::RequirementSet,TypeSet<FileLog,StandardLogStyle>>::type
             StandardFile;
-    
+
     typedef typename BaseInputState
             ::template SetItem<key::RequirementSet,TypeSet<FileLog,ColoredLogStyle>>::type
             ColoredFile;
@@ -307,6 +311,7 @@ int main() {
             ::template SetItem<key::RequirementSet,TypeSet<PrintLog,ColoredLogStyle>>::type
             ColoredPrint;
 
+    
     run<typename context::CreateContextType<StandardFile>::type>();
     run<typename context::CreateContextType<ColoredFile>::type>();
     run<typename context::CreateContextType<StandardPrint>::type>();

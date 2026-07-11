@@ -173,13 +173,20 @@ namespace context {
 
         typedef SearchRecurse<State> SelfType;
         
+        typedef typename TraitMap::KeySet
+                ::template Filter<search::HasTransform>::type
+                ::template Map<search::GetTransform>::type
+                ::MapType::KeyArray
+                TraitTransforms;
+        
         typedef typename ImplMap::KeySet
                 ::template Filter<search::HasTransform>::type
                 ::template Map<search::GetTransform>::type
                 ::MapType::KeyArray
-                UserTransforms;
+                ImplTransforms;
         
-        typedef typename UserTransforms
+        typedef typename TraitTransforms
+                ::template Concatenate<ImplTransforms>::type
                 ::template Concatenate<TformQueue>::type
                 UpdatedTformQueue; 
        
@@ -248,6 +255,12 @@ namespace context {
                 static constexpr bool value = REQ_SET::template Filter<TraitMissing<TRAIT_MAP>::template Selector>::type::MapType::ITEM_COUNT == 0;
             };
         };
+        
+        struct EarlyFailContextInfo {
+            static constexpr bool ALL_REQS_SATISFIED = false;
+        };
+    
+        struct EarlyFailContext {};
     }
 
     // Removes:
@@ -264,6 +277,13 @@ namespace context {
         // Retrieve the trait map an impl map from STATE
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type OriginalTraitMap;
         typedef typename STATE::template ItemAt<context::key::ImplMap>::type OriginalImplMap;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
+
+        typedef typename STATE
+                ::template SetItem<context::key::CheckInfo,prune::EarlyFailContextInfo>::type
+                ::template SetItem<context::key::ContextType,prune::EarlyFailContext>::type
+                ::template SetItem<context::key::TransformQueue,container::TypeArray<>>::type
+                EarlyFailState;
 
         // Perform removals via filter operations
         typedef typename OriginalTraitMap::template FilterItems<
@@ -272,6 +292,12 @@ namespace context {
         typedef typename OriginalImplMap::template FilterItems<
                 prune::ImplementationHasTraits<OriginalTraitMap>::template Selector
             >::type UpdatedImplMap;
+
+        typedef typename OriginalTraitMap::template FilterItems<
+                container::util::Negate<prune::TraitHasImplementations<OriginalImplMap>::template Selector>::template Template
+            >::type::KeySet UnsatTraits;
+        static constexpr bool UNSATISFIED       = UnsatTraits::template Intersection<ReqSet>::type::MapType::ITEM_COUNT != 0;
+        static constexpr bool SHOULD_FAIL_EARLY = STATE::template ItemAt<context::key::unsat::FailEarly>::type::value;
 
         // Determine if any changes occured in the trait/impl map
         static constexpr bool NO_TRAIT_CHANGE = std::is_same<OriginalTraitMap,UpdatedTraitMap>::value;
@@ -292,7 +318,14 @@ namespace context {
                 ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
                 ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
                 ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
-                type;
+                AnticipatedReturnState;
+
+
+        typedef typename container::TypeArray<
+                AnticipatedReturnState,
+                EarlyFailState
+            >::template ItemAt<UNSATISFIED && SHOULD_FAIL_EARLY>::type
+            type;
     };
 
     // Saves the original, unpruned versions of the trait/impl maps before pruning,
@@ -313,6 +346,7 @@ namespace context {
 
         // Update and return STATE
         typedef typename STATE
+                ::template DefaultItem<context::key::unsat::FailEarly,AlwaysFalse<void>>::type
                 ::template SetItem<context::key::UnprunedMap,UnprunedMap>::type
                 ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
                 type;
@@ -367,6 +401,7 @@ namespace context {
                 TformQueue
             >::template ItemAt<EMPTY_FRONTIER>::type UpdatedTformQueue;
 
+
         // Update and return the transform state
         typedef typename STATE
                 ::template UpdateItem<key::unsat::ReqTraitFrontier,UpdatedTraitFrontier>::type
@@ -375,6 +410,9 @@ namespace context {
                 ::template UpdateItem<key::unsat::ReqImpls,        UpdatedImplSet>::type
                 ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
                 type;
+
+
+
     };
 
 
@@ -828,7 +866,10 @@ namespace context {
                          InputState;
 
         typedef typename context::EvalTransform<InputState>::type State;
+
+        #ifdef HARMONIZE_TRACK_SEQUENCE
         typedef typename context::EvalTransform<InputState>::Sequence Sequence;
+        #endif
 
         typedef typename State::template ItemAt<context::key::ContextType>::type type;
 

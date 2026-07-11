@@ -147,7 +147,9 @@ namespace context {
         );
         typedef check::TransformStateInfo<STATE> Info;
         typedef STATE type; 
+        #ifdef HARMONIZE_TRACK_SEQUENCE
         typedef container::TypeArray<STATE> Sequence;
+        #endif
     };
 
     template<typename STATE>
@@ -174,7 +176,9 @@ namespace context {
         // The result of the rest of the transformations
         typedef typename EvalTransform<NextState>::type type;  
         // The sequence of states that led to the result
+        #ifdef HARMONIZE_TRACK_SEQUENCE
         typedef typename EvalTransform<NextState>::Sequence::template PushFront<STATE>::type Sequence;
+        #endif
     };
 
 
