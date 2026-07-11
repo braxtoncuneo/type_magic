@@ -539,6 +539,8 @@ struct Binding
 
 
 namespace type_map {
+
+
     template <typename KEY, typename ITEM>
     static Binding<KEY, ITEM> _lookup_helper(Binding<KEY, ITEM>) {}
 
@@ -546,12 +548,18 @@ namespace type_map {
     struct Lookup {
         typedef typename decltype(_lookup_helper<KEY>(TypeMap<BINDINGS...>{}))::ItemType type;
     };
-
+    
+    template <typename... LEFT_BINDINGS, typename... RIGHT_BINDINGS>
+    constexpr TypeMap<LEFT_BINDINGS...,RIGHT_BINDINGS...>  operator| (TypeMap<LEFT_BINDINGS...> left, TypeMap<RIGHT_BINDINGS...> right);
     
     template <template<typename>typename MAPPER, typename... BINDINGS>
-    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input) {
-        return {};
-    };
+    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input);
+
+    template <template<typename>typename FILTER,typename BINDING>
+    constexpr auto filter_element(TypeMap<BINDING> input);
+
+    template<template<typename>typename FILTER,typename... BINDINGS>
+    constexpr auto filter(TypeMap<BINDINGS...> input);
 
 }
 
@@ -743,6 +751,7 @@ struct TypeMap
 };
 
 
+
 // Recursive case
 template<typename HEAD, typename... TAIL>
 struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
@@ -916,23 +925,9 @@ struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
         typedef typename LossyCombineType::type type;
     };
 
-    template <template<typename> typename SELECTOR,typename ENABLE=void>
-    struct Filter;
-
     template <template<typename> typename SELECTOR>
-    struct Filter <
-        SELECTOR,
-        typename std::enable_if<SELECTOR<HEAD>::value>::type
-    > {
-        typedef typename TypeMap<HEAD>::template Combine<typename TailType::template Filter<SELECTOR>::type>::type type;
-    };
-
-    template <template<typename> typename SELECTOR>
-    struct Filter <
-        SELECTOR,
-        typename std::enable_if<!(SELECTOR<HEAD>::value)>::type
-    > {
-        typedef typename TailType::template Filter<SELECTOR>::type type;
+    struct Filter {
+        typedef decltype(type_map::filter<SELECTOR>(SelfType{})) type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -957,8 +952,8 @@ struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
 
     template <template<typename> typename MAPPER>
     struct Map {
-        //typedef TypeMap<typename MAPPER<HEAD>::type,typename MAPPER<TAIL>::type...> type;
-        typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
+        typedef TypeMap<typename MAPPER<HEAD>::type,typename MAPPER<TAIL>::type...> type;
+        //typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
     };
 
     template <template<typename> typename MAPPER>
@@ -1083,6 +1078,37 @@ struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
 
 };
 
+
+
+namespace type_map {
+
+    template <typename... LEFT_BINDINGS, typename... RIGHT_BINDINGS>
+    constexpr TypeMap<LEFT_BINDINGS...,RIGHT_BINDINGS...>  operator+ (TypeMap<LEFT_BINDINGS...> left, TypeMap<RIGHT_BINDINGS...> right) {
+        return {};
+    };
+
+
+    template <template<typename>typename MAPPER, typename... BINDINGS>
+    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input) {
+        return {};
+    };
+
+    template <template<typename>typename FILTER,typename BINDING>
+    constexpr auto filter_element(TypeMap<BINDING> input) {
+        if constexpr (FILTER<BINDING>::value) {
+            return TypeMap<BINDING>{};
+        } else {
+            return TypeMap<>{};
+        }
+    }
+
+
+    template<template<typename>typename FILTER,typename... BINDINGS>
+    constexpr auto filter(TypeMap<BINDINGS...> input) {
+        return (TypeMap<>{} + ... + filter_element<FILTER>(TypeMap<BINDINGS>{}));
+    }
+
+}
 
 
 
