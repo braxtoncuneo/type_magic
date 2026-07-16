@@ -4,7 +4,9 @@
 #include "../container/mod.h"
 #include "key.h"
 #include "module.h"
+#include "demux.h"
 #include "transform.h"
+
 
 #include <iostream>
 #include <tuple>
@@ -856,6 +858,7 @@ namespace context {
             Meta<Prune>,
             Meta<Cull>, 
             Meta<Check>,
+            Meta<Multiplex>,
             Meta<Reify>
         > DefaultTformQueue;
 
