@@ -2,6 +2,9 @@
 #define HARMONIZE_CONTEXT_CONTEXT
 
 #include "../container/mod.h"
+#include "key.h"
+#include "module.h"
+#include "transform.h"
 
 #include <iostream>
 #include <tuple>
@@ -41,401 +44,555 @@ auto init(ARGS&&... args) {
 
 namespace context {
 
-    namespace _util {
-        template<typename TYPE>
-        using GetImplFor = Meta<TYPE::template ImplFor>;
-    };
 
-    template<typename TYPE>
-    struct IsModule
-    {
-        static constexpr bool value = !SpecializeOrFallBack<DoesNotExist,void,_util::GetImplFor,TYPE>::fell_back;
-    };
-
-    template<typename SPACE,typename TYPE,typename MARKER>
-    struct StaticMember {};
-
-    template<typename COMPONENT, typename TRAIT>
-    struct Private {};
-
-    template<typename BUILTIN>
-    struct Builtin{};
-
-    template<typename COMPONENT>
-    struct Mixin {};
-
-    template <typename... REQUIREMENTS>
-    struct RequirementSet
-    {
-        typedef container::TypeSet<REQUIREMENTS...> SetType;
-    };
-
-    template <typename... IMPLEMENTATIONS>
-    struct ImplementationSet
-    {
-        typedef container::TypeSet<IMPLEMENTATIONS...> SetType;
-    };
-
-
-    struct EmptyModule {
-        template <typename TRAIT>
-        struct ImplFor {
-            typedef container::TypeMap<> type;
-        };
-    };
-
-    template<typename IMPL, typename... ARGS>
-    struct SimpleModule
-    {
-
-        typedef typename container::template TypeSet<ARGS...>::template CollapseAll<RequirementSet>::type ReqSet;
-        typedef typename container::template TypeSet<ARGS...>::template CollapseAll<ImplementationSet>::type::SetType ImplSet;
-
-        template<typename TRAIT>
-        struct ImplFor {
-            static constexpr bool TRAIT_VALID = ImplSet::template has_item<TRAIT>();
-            typedef typename container::TypeArray<
-                container::TypeMap<>,container::TypeMap<container::Binding<IMPL,typename ReqSet::SetType>>
-            >::template ItemAt<(size_t)TRAIT_VALID>::type type;
-        };
-
-    };
-
-    template<typename TRAIT>
-    struct TagTrait : SimpleModule <
-        TRAIT,
-        context::RequirementSet<>,
-        context::ImplementationSet<TRAIT>
-    > {};
-
-
-    template<typename T, typename W=void>
-    struct IsModuleWrapper {
-        static constexpr bool value = false;
-    };
-
-    template<typename T>
-    struct IsModuleWrapper <T,typename AlwaysVoid<typename T::Module>::type> {
-        static constexpr bool value = true;
-    };
-
-
-    template<
-        template <typename...> typename TRAIT_TEMPLATE,
-        template <typename...> typename MODULE_TEMPLATE
-    >
-    struct MetaModule {
-        
-        template<
-            typename TRAIT,
-            typename ENABLE=void
-        >
-        struct ModuleFor {
-            typedef EmptyModule type;
-        };
-        
-        template<typename... ARGS>
-        struct ModuleFor <
-            TRAIT_TEMPLATE<ARGS...>,
-            typename std::enable_if<IsModuleWrapper<MODULE_TEMPLATE<ARGS...>>::value>::type
-        > {
-            typedef typename MODULE_TEMPLATE<ARGS...>::Module type;
-        };
-
-        template<typename TRAIT>
-        struct ImplFor {
-            typedef typename ModuleFor<TRAIT>::type::template ImplFor<TRAIT>::type type;
-        };
-
-    };
-
-
-    template <typename... MODULES>
-    struct ModuleBundle {
-
-        typedef container::TypeSet<MODULES...> SubModuleSet;
-
-        template<typename TRAIT>
-        struct ImplFor {
-
-            template<typename A, typename B>
-            struct CombineImpl {
-                static_assert(
-                    container::IsTypeMap<A>::value,
-                    ASSERT_TEXT("INTERNAL ERROR: Folding combine operation of ModuleBundle of ImplFor should fold into a TypeMap.")
-                );
-                static_assert(
-                    IsModule<B>::value,
-                    ASSERT_TEXT("ERROR: A constituent of a ModuleBundle does not have the members required of a module.")
-                );
-                typedef typename B::template ImplFor<TRAIT>::type ImplMap;
-                static_assert(
-                    container::IsTypeMap<ImplMap>::value,
-                    ASSERT_TEXT("ERROR: A constituent of a ModuleBundle did not return a TypeMap from its ImplFor template.")
-                );
-                typedef typename A::LossyCombine<ImplMap> LossyCombo;
-                typedef typename LossyCombo::type type;
-                static_assert(
-                    !LossyCombo::duplicate_key,
-                    ASSERT_TEXT( "ERROR: The same type is listed as an implementation multiple times! Each implementation should be "
-                    "generated only once across all modules.")
-                );
-            };
-
-            typedef typename SubModuleSet::template Fold<container::TypeMap<>,CombineImpl>::type type;
-        };
-
-    };
-
-
+    // Bundles trait/impl mappings together for transform states
     template<typename TRAIT_MAP, typename IMPL_MAP>
-    struct DepMap {
+    struct DependencyMap {
         typedef TRAIT_MAP TraitMap;
         typedef IMPL_MAP  ImplMap;
     };
 
 
-    template<
-        typename ROOT,
-        typename REQ_SET,
-        typename TRAIT_MAP=container::TypeMap<>,
-        typename IMPL_MAP=container::TypeMap<>
-    >
-    struct DepMapBuild {
+
+    // Expands the base trait/impl mappings, beginning with the traits in
+    // STATE[keys::RequirementSet], then following trait->implementation
+    // edges and implementation->requirement edges.
+    template<typename STATE,typename ENABLE=void>
+    struct SearchRecurse {
+        static_assert(
+            container::IsTypeMap<STATE>::value,
+            ASSERT_TEXT("ERROR: STATE parameter must be a TypeMap.")
+        );
+        static_assert(
+            !container::IsTypeMap<STATE>::value,
+            ASSERT_TEXT("INTERNAL ERROR: This specialization should never recieve a TypeMap as a parameter.")
+        );
+    };
+    
+
+    // Performs expansion in cases where the frontier of traits and implementations
+    // is non-empty
+    template<typename...ARGS>
+    struct SearchRecurse <
+        container::TypeMap<ARGS...>,
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::search::TraitFrontier>::type::MapType::ITEM_COUNT!=0>::type
+    > {
+
+        // Access relevant information in transform state
+        typedef container::TypeMap<ARGS...> STATE;
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type     Root;
+        typedef typename STATE::template ItemAt<context::key::search::TraitFrontier>::type Frontier;
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type       TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type        ImplMap;
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
         static_assert(
-            container::IsTypeSet<REQ_SET>::value,
-            ASSERT_TEXT("INTERNAL ERROR: REQ_SET parameter must be a TypeSet.")
+            container::IsTypeSet<Frontier>::value,
+            ASSERT_TEXT("INTERNAL ERROR: Frontier field must be a TypeSet.")
         );
         static_assert(
-            container::IsTypeMap<TRAIT_MAP>::value,
-            ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
+            container::IsTypeMap<TraitMap>::value,
+            ASSERT_TEXT("INTERNAL ERROR: TraitMap parameter must be a TypeMap.")
         );
         static_assert(
-            container::IsTypeMap<IMPL_MAP>::value,
-            ASSERT_TEXT("INTERNAL ERROR: TRAIT_MAP parameter must be a TypeMap.")
+            container::IsTypeMap<ImplMap>::value,
+            ASSERT_TEXT("INTERNAL ERROR: ImplMap parameter must be a TypeMap.")
         );
         
-        typedef DepMapBuild<ROOT,REQ_SET,TRAIT_MAP,IMPL_MAP> SelfType;
+        typedef SearchRecurse<STATE> SelfType;
 
         template <typename TYPE>
         struct NotInOldTraits {
-            static constexpr bool value = ! TRAIT_MAP::template has_key<TYPE>();
+            static constexpr bool value = ! TraitMap::template has_key<TYPE>();
         };
 
         // Get the set of required traits that have not yet been added to the trait map
-        typedef typename REQ_SET::template Filter<NotInOldTraits>::type UnQueriedTraits;
+        typedef typename Frontier::template Filter<NotInOldTraits>::type UnQueriedTraits;
 
         // Get a mapping of unqueried traits to the implementation maps returned for those traits
-        typedef typename UnQueriedTraits::MapType::template MapItems<ROOT::template ImplFor>::type NewDepMap;
+        typedef typename UnQueriedTraits::MapType::template MapItems<Root::template ImplFor>::type NewDepMap;
        
         //Extract a mapping from all queried traits to their implementations
         typedef typename NewDepMap::template MapItems<container::util::type_map::KeySet>::type NewTraitMap;
 
         // Combine this mapping with the current trait map
-        typedef typename TRAIT_MAP::template Combine<NewTraitMap>::type UpdatedTraitMap;
+        typedef typename TraitMap::template Combine<NewTraitMap>::type UpdatedTraitMap;
 
         // Extract a combination of all implementation maps returned from the queries
         typedef typename NewDepMap::template FoldItems<container::TypeMap<>,container::util::type_map::MapOfSetsCombine>::type NewImplMap;
         // Combine these mappings with the current implementation map
-        typedef typename IMPL_MAP::template LossyCombine<NewImplMap>::type UpdatedImplMap;
+        typedef typename ImplMap::template LossyCombine<NewImplMap>::type UpdatedImplMap;
 
         // Extract the union of all trait requirements listed by the newly-found impl maps
         typedef typename NewImplMap::template FoldItems<container::TypeSet<>,container::util::type_set::BinaryUnion>::type NewImplMapReqs;
         // Filter down set of traits to those that are not already listed in the updated trait map
         typedef typename NewImplMapReqs::template Difference<typename UpdatedTraitMap::KeySet>::type NewReqSet;
-    
+   
         // Recursively define the fully-resolved mappings of traits to implementations and vice-versa
-        typedef DepMapBuild<ROOT,NewReqSet,UpdatedTraitMap,UpdatedImplMap> NextIteration;
-        typedef typename NextIteration::FinalIteration FinalIteration;
-        typedef typename NextIteration::Result Result;
-        typedef typename Result::TraitMap TraitMap;
-        typedef typename Result::ImplMap  ImplMap;
-    };
+        typedef typename TformQueue::template PushFront<Meta<SearchRecurse>>::type UpdatedTformQueue;
 
-
-    template <
-        typename ROOT,
-        typename TRAIT_MAP,
-        typename IMPL_MAP
-    >
-    struct DepMapBuild <ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP>
-    {
-
-        typedef DepMapBuild<ROOT,container::TypeSet<>,TRAIT_MAP,IMPL_MAP> SelfType;
-        typedef TRAIT_MAP TraitMap;
-        typedef IMPL_MAP  ImplMap;
-        typedef SelfType FinalIteration;
-        typedef DepMap<TraitMap,ImplMap> Result;
+        // Update state field for next iteration
+        typedef typename STATE::template UpdateItem<context::key::search::TraitFrontier,NewReqSet>::type
+                     ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
+                     ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
+                     ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                     type;
 
     };
 
 
-    template <typename IMPL_MAP>
-    struct ImplementsTrait {
-        template <typename TRAIT>
-        struct Selector {
-            static constexpr bool value = IMPL_MAP::template has_key<TRAIT>();
-        };
-    };
-
-    template <typename IMPL_MAP>
-    struct TraitHasImplementations {
-        template <typename IMPL_SET>
-        struct Selector {
-            static constexpr bool value = IMPL_SET::template Filter<ImplementsTrait<IMPL_MAP>::template Selector>::type::MapType::ITEM_COUNT > 0;
-        };
-    };
-
-
-    template<typename TRAIT_MAP>
-    struct TraitMissing {
-        template <typename TYPE>
-        struct Selector {
-            static constexpr bool value = ! TRAIT_MAP::template has_key<TYPE>();
+    namespace search {
+        template <typename IMPL, typename ENABLE=void>
+        struct HasTransform {
+            static constexpr bool value = false; 
         };
 
-    };
-
-    template <typename TRAIT_MAP>
-    struct ImplementationHasTraits {
-        template <typename REQ_SET>
-        struct Selector {
-            static constexpr bool value = REQ_SET::template Filter<TraitMissing<TRAIT_MAP>::template Selector>::type::MapType::ITEM_COUNT == 0;
+        template<typename IMPL>
+        struct HasTransform <IMPL,typename AlwaysVoid<Meta<IMPL::template Transform>>::type> {
+            static constexpr bool value = true;
         };
-    };
 
-    template <typename DEP_MAP, typename PREV_DEP_MAP=void>
-    struct Prune {
-        typedef typename DEP_MAP::TraitMap::template FilterItems<TraitHasImplementations<typename DEP_MAP::ImplMap>::template Selector>::type UpdatedTraitMap;
-        typedef typename DEP_MAP::ImplMap::template FilterItems<ImplementationHasTraits<typename DEP_MAP::TraitMap>::template Selector>::type UpdatedImplMap;
-
-        typedef Prune<DepMap<UpdatedTraitMap,UpdatedImplMap>,DEP_MAP> NextIteration;
-        typedef typename NextIteration::FinalIteration FinalIteration;
-        typedef typename NextIteration::Result Result;
-    };
-
-    template <typename DEP_MAP>
-    struct Prune <DEP_MAP,DEP_MAP>{
-        typedef Prune<DEP_MAP,DEP_MAP> FinalIteration;
-        typedef DEP_MAP Result;
-    };
+        template<typename IMPL>
+        struct GetTransform {
+            typedef Meta<IMPL::template Transform> type;
+        };
+    }
 
 
-    template<typename TYPE,typename SOLN_SEQ=container::TypeArray<>,typename ENABLE=void >
-    struct SolutionSequence {
-        typedef typename SOLN_SEQ::template PushBack<TYPE>::type UpdatedSolnSeq;
-        typedef SolutionSequence<typename TYPE::NextIteration,UpdatedSolnSeq> NextIteration;
-        typedef typename NextIteration::Result Result;
-    };
+    // Handles the base case (empty frontier)
+    template<typename... ARGS>
+    struct SearchRecurse <
+        container::TypeMap<ARGS...>,
+        typename std::enable_if<container::TypeMap<ARGS...>::template ItemAt<context::key::search::TraitFrontier>::type::MapType::ITEM_COUNT==0>::type
+    > {
+        typedef container::TypeMap<ARGS...> State;
+        typedef typename State::template ItemAt<context::key::RootModule>::type     Root;
+        typedef typename State::template ItemAt<context::key::TraitMap>::type       TraitMap;
+        typedef typename State::template ItemAt<context::key::ImplMap>::type        ImplMap;
+        typedef typename State::template ItemAt<context::key::TransformQueue>::type TformQueue;
 
-    template<typename TYPE,typename SOLN_SEQ>
-    struct SolutionSequence <TYPE,SOLN_SEQ,typename std::enable_if<std::is_same<TYPE,typename TYPE::FinalIteration>::value>::type> {
-        typedef typename SOLN_SEQ::template PushBack<TYPE>::type Result;
-    };
-
-    
-    template<
-        typename FULL_MAP,
-        typename UNSAT_TRAITS,
-        typename UNSAT_IMPLS,
-        typename FRONTIER_TRAIT_SET,
-        typename FRONTIER_IMPL_SET,
-        typename TRAIT_SET,
-        typename IMPL_SET
-    > struct UnsatRecurse {
+        typedef SearchRecurse<State> SelfType;
         
-        typedef typename FRONTIER_TRAIT_SET::Map<FULL_MAP::TraitMap::template ItemAt>::type TraitFrontierImplSets;
-        typedef typename Meta<container::TypeSet<>::template Union>::SpecializeFromTypeSet<TraitFrontierImplSets>::type::type UnfilteredImplFrontier;
-        typedef typename UnfilteredImplFrontier::template Intersection<UNSAT_IMPLS>::type::template Difference<IMPL_SET>::type UpdatedImplFrontier;
+        typedef typename TraitMap::KeySet
+                ::template Filter<search::HasTransform>::type
+                ::template Map<search::GetTransform>::type
+                ::MapType::KeyArray
+                TraitTransforms;
         
-        typedef typename FRONTIER_IMPL_SET::Map<FULL_MAP::ImplMap::template ItemAt>::type ImplFrontierTraitSets;
-        typedef typename Meta<container::TypeSet<>::template Union>::template SpecializeFromTypeSet<ImplFrontierTraitSets>::type::type UnfilteredTraitFrontier;
-        typedef typename UnfilteredTraitFrontier::template Intersection<UNSAT_TRAITS>::type::template Difference<TRAIT_SET>::type UpdatedTraitFrontier;
+        typedef typename ImplMap::KeySet
+                ::template Filter<search::HasTransform>::type
+                ::template Map<search::GetTransform>::type
+                ::MapType::KeyArray
+                ImplTransforms;
         
-
-        typedef typename TRAIT_SET::template Union<FRONTIER_TRAIT_SET>::type UpdatedTraitSet;
-        typedef typename IMPL_SET ::template Union<FRONTIER_IMPL_SET> ::type UpdatedImplSet;
-
-
-        typedef UnsatRecurse<
-            FULL_MAP,
-            UNSAT_TRAITS,
-            UNSAT_IMPLS,
-            UpdatedTraitFrontier,
-            UpdatedImplFrontier,
-            UpdatedTraitSet,
-            UpdatedImplSet
-        > NextIteration;
-
-        typedef typename NextIteration::FinalIteration FinalIteration;
-        typedef typename NextIteration::Result Result;
-
-    };
-
-    template<
-        typename FULL_MAP,
-        typename UNSAT_TRAITS,
-        typename UNSAT_IMPL,
-        typename TRAIT_SET,
-        typename IMPL_SET
-    > struct UnsatRecurse <
-        FULL_MAP,
-        UNSAT_TRAITS,
-        UNSAT_IMPL,
-        container::TypeSet<>,
-        container::TypeSet<>,
-        TRAIT_SET,
-        IMPL_SET
-    >{
-        typedef UnsatRecurse <
-            FULL_MAP,
-            UNSAT_TRAITS,
-            UNSAT_IMPL,
-            typename container::TypeSet<>,
-            typename container::TypeSet<>,
-            TRAIT_SET,
-            IMPL_SET
-        > FinalIteration;
-
-        struct Result {
-            typedef TRAIT_SET TraitSet;
-            typedef IMPL_SET  ImplSet;
-        }; 
-    };
-
-
-    template<typename REQ_SET, typename FULL_MAP, typename PRUNED_MAP>
-    struct DepMapCheck {
-
-        typedef typename container::util::Negate<PRUNED_MAP::TraitMap::template HasKey> TraitIsNotSat; 
-        typedef typename container::util::Negate<PRUNED_MAP::ImplMap ::template HasKey> CompIsNotSat; 
-        
-        typedef typename FULL_MAP::TraitMap::template FilterKeys<TraitIsNotSat::template Template>::type UnsatTraitMap;
-        typedef typename FULL_MAP::ImplMap::template  FilterKeys<CompIsNotSat ::template Template>::type  UnsatImplMap;
-
-        typedef typename REQ_SET::template Intersection<typename UnsatTraitMap::KeySet>::type TopLevelUnsatReqs;
-
-        typedef UnsatRecurse<
-            FULL_MAP,
-            typename UnsatTraitMap::KeySet,
-            typename UnsatImplMap::KeySet,
-            TopLevelUnsatReqs,
-            container::TypeSet<>,
-            container::TypeSet<>,
-            container::TypeSet<>
-        > UnsatSearch;
+        typedef typename TraitTransforms
+                ::template Concatenate<ImplTransforms>::type
+                ::template Concatenate<TformQueue>::type
+                UpdatedTformQueue; 
        
-       typedef typename UnsatSearch::Result ReqUnsat;
+        typedef typename State
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+
+    };
     
+    template<typename STATE>
+    struct Search {
+
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type ReqSet;
+        
+        typedef typename TformQueue
+                ::template PushFront<Meta<SearchRecurse>>::type
+                UpdatedTformQueue; 
+       
+        typedef typename STATE
+                ::template SetItem<context::key::search::TraitFrontier,ReqSet>::type
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+
+    };
+
+    
+    // Filters for the Prune transform
+    namespace prune {
+
+        // Returns true if the provided IMPL_MAP contains the TRAIT supplied to
+        // the inner template
+        template <typename IMPL_MAP>
+        struct ImplementsTrait {
+            template <typename TRAIT>
+            struct Selector {
+                static constexpr bool value = IMPL_MAP::template has_key<TRAIT>();
+            };
+        };
+
+        // Returns true if the provided trait has implementatiosn in the 
+        template <typename IMPL_MAP>
+        struct TraitHasImplementations {
+            template <typename IMPL_SET>
+            struct Selector {
+                static constexpr bool value = IMPL_SET::template Filter<ImplementsTrait<IMPL_MAP>::template Selector>::type::MapType::ITEM_COUNT > 0;
+            };
+        };
+
+        // Returns true if the provided TRAIT_MAP does not contain the provided TRAIT
+        template<typename TRAIT_MAP>
+        struct TraitMissing {
+            template <typename TRAIT>
+            struct Selector {
+                static constexpr bool value = ! TRAIT_MAP::template has_key<TRAIT>();
+            };
+
+        };
+
+        // Returns true if the provided TRAIT_MAP includes all elements of REQ_SET
+        // as keys
+        template <typename TRAIT_MAP>
+        struct ImplementationHasTraits {
+            template <typename REQ_SET>
+            struct Selector {
+                static constexpr bool value = REQ_SET::template Filter<TraitMissing<TRAIT_MAP>::template Selector>::type::MapType::ITEM_COUNT == 0;
+            };
+        };
+        
+        struct EarlyFailContextInfo {
+            static constexpr bool ALL_REQS_SATISFIED = false;
+        };
+    
+        struct EarlyFailContext {};
+    }
+
+    // Removes:
+    //  - all traits from STATE[key::TraitMap] which have no implementations
+    //    included as a key in STATE[key::ImplMap]
+    //  - all implementations from STATE[key::ImplMap] which have at least one trait
+    //    not included as a key in STATE[key::TraitMap]
+    //
+    // Queues a repeat of the transform unless no removals occurred in the
+    // current iteration
+    template <typename STATE>
+    struct PruneRecurse {
+
+        // Retrieve the trait map an impl map from STATE
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type OriginalTraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type OriginalImplMap;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
+
+        typedef typename STATE
+                ::template SetItem<context::key::CheckInfo,prune::EarlyFailContextInfo>::type
+                ::template SetItem<context::key::ContextType,prune::EarlyFailContext>::type
+                ::template SetItem<context::key::TransformQueue,container::TypeArray<>>::type
+                EarlyFailState;
+
+        // Perform removals via filter operations
+        typedef typename OriginalTraitMap::template FilterItems<
+                prune::TraitHasImplementations<OriginalImplMap>::template Selector
+            >::type UpdatedTraitMap;
+        typedef typename OriginalImplMap::template FilterItems<
+                prune::ImplementationHasTraits<OriginalTraitMap>::template Selector
+            >::type UpdatedImplMap;
+
+        typedef typename OriginalTraitMap::template FilterItems<
+                container::util::Negate<prune::TraitHasImplementations<OriginalImplMap>::template Selector>::template Template
+            >::type::KeySet UnsatTraits;
+        static constexpr bool UNSATISFIED       = UnsatTraits::template Intersection<ReqSet>::type::MapType::ITEM_COUNT != 0;
+        static constexpr bool SHOULD_FAIL_EARLY = STATE::template ItemAt<context::key::unsat::FailEarly>::type::value;
+
+        // Determine if any changes occured in the trait/impl map
+        static constexpr bool NO_TRAIT_CHANGE = std::is_same<OriginalTraitMap,UpdatedTraitMap>::value;
+        static constexpr bool NO_IMPL_CHANGE  = std::is_same<OriginalImplMap,UpdatedImplMap>::value;
+        static constexpr bool NO_CHANGE = NO_TRAIT_CHANGE && NO_IMPL_CHANGE;
+
+
+        // Insert a repeat of the transform if any change occured
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
+        typedef typename container::TypeArray <
+                typename TformQueue::template PushFront<Meta<PruneRecurse>>::type,
+                TformQueue
+            >::template ItemAt<NO_CHANGE>::type
+            UpdatedTformQueue;
+
+        // Update the trait/impl maps and the transform queue
+        typedef typename STATE
+                ::template UpdateItem<context::key::TraitMap,UpdatedTraitMap>::type
+                ::template UpdateItem<context::key::ImplMap,UpdatedImplMap>::type
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                AnticipatedReturnState;
+
+
+        typedef typename container::TypeArray<
+                AnticipatedReturnState,
+                EarlyFailState
+            >::template ItemAt<UNSATISFIED && SHOULD_FAIL_EARLY>::type
+            type;
+    };
+
+    // Saves the original, unpruned versions of the trait/impl maps before pruning,
+    // then queues up PruneRecurse to begin pruning
+    template <typename STATE>
+    struct Prune {
+
+        // Retrieve relevant fields from STATE
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type UnprunedTraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type UnprunedImplMap;
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
+       
+        // Bundle together the original trait/impl 
+        typedef context::DependencyMap<UnprunedTraitMap,UnprunedImplMap> UnprunedMap;
+        
+        // Create an updated transform queue beginning with PruneRecurse
+        typedef typename TformQueue::template PushFront<Meta<PruneRecurse>>::type UpdatedTformQueue;
+
+        // Update and return STATE
+        typedef typename STATE
+                ::template DefaultItem<context::key::unsat::FailEarly,AlwaysFalse<void>>::type
+                ::template SetItem<context::key::UnprunedMap,UnprunedMap>::type
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+    };
+
+
+    // Recursively searches for unsatisfiable traits/impls that are reacheable
+    // from context requirements through a path consisting of only such 
+    // unsatisfiable traits/impls.
+    template<typename STATE>
+    struct UnsatRecurse {
+
+        // Retrieve relevant fields from STATE
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type        TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type         ImplMap;
+        typedef typename STATE::template ItemAt<context::key::UnprunedMap>::type     Unpruned;
+        typedef typename STATE::template ItemAt<key::unsat::Traits>::type            UnsatTraits;
+        typedef typename STATE::template ItemAt<key::unsat::Impls>::type             UnsatImpls;
+        typedef typename STATE::template ItemAt<key::unsat::ReqTraitFrontier>::type  FrontierTraitSet;
+        typedef typename STATE::template ItemAt<key::unsat::ReqImplFrontier>::type   FrontierImplSet;
+        typedef typename STATE::template ItemAt<key::unsat::ReqTraits>::type         TraitSet;
+        typedef typename STATE::template ItemAt<key::unsat::ReqImpls>::type          ImplSet;
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
+
+        // Get mapping of all impls referenced in the trait frontier
+        typedef typename FrontierTraitSet::template Map<Unpruned::TraitMap::template ItemAt>::type TraitFrontierImplSets;
+        // Convert the aformentioned mapping into a set
+        typedef typename Meta<container::TypeSet<>::template Union>::SpecializeFromTypeSet<TraitFrontierImplSets>::type::type UnfilteredImplFrontier;
+        // Filter down the set down to unreached impls
+        typedef typename UnfilteredImplFrontier::template Intersection<UnsatImpls>::type::template Difference<ImplSet>::type UpdatedImplFrontier;
+        
+        // Get mapping of all traits referenced in the impl frontier
+        typedef typename FrontierImplSet::template Map<Unpruned::ImplMap::template ItemAt>::type ImplFrontierTraitSets;
+        // Convert the aformentioned mapping into a set
+        typedef typename Meta<container::TypeSet<>::template Union>::template SpecializeFromTypeSet<ImplFrontierTraitSets>::type::type UnfilteredTraitFrontier;
+        // Filter down the set down to unreached traits
+        typedef typename UnfilteredTraitFrontier::template Intersection<UnsatTraits>::type::template Difference<TraitSet>::type UpdatedTraitFrontier; 
+
+        // Update set of visited traits/impls
+        typedef typename TraitSet::template Union<FrontierTraitSet>::type UpdatedTraitSet;
+        typedef typename ImplSet::template Union<FrontierImplSet> ::type UpdatedImplSet;
+
+        // Determine if there is still more of the graph to explore
+        static constexpr bool EMPTY_TRAIT_FRONTIER = std::is_same<container::TypeSet<>,UpdatedTraitFrontier>::value;
+        static constexpr bool EMPTY_IMPL_FRONTIER  = std::is_same<container::TypeSet<>,UpdatedImplFrontier>::value;
+        static constexpr bool EMPTY_FRONTIER       = EMPTY_TRAIT_FRONTIER && EMPTY_IMPL_FRONTIER;
+
+        // Insert a new UnsatRecurse iteration into the front of the transform queue
+        // if the frontier is non-empty
+        typedef typename container::TypeArray<
+                typename TformQueue::template PushFront<Meta<UnsatRecurse>>::type,
+                TformQueue
+            >::template ItemAt<EMPTY_FRONTIER>::type UpdatedTformQueue;
+
+
+        // Update and return the transform state
+        typedef typename STATE
+                ::template UpdateItem<key::unsat::ReqTraitFrontier,UpdatedTraitFrontier>::type
+                ::template UpdateItem<key::unsat::ReqImplFrontier, UpdatedImplFrontier>::type
+                ::template UpdateItem<key::unsat::ReqTraits,       UpdatedTraitSet>::type
+                ::template UpdateItem<key::unsat::ReqImpls,        UpdatedImplSet>::type
+                ::template UpdateItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                type;
+
+
+
+    };
+
+
+    // Trait representing the context reflection information provided to contexts
+    struct ContextInfo {};
+
+    // The standard implementation of ContextInfo
+    template<typename ROOT, typename CHECK>
+    struct ContextInfoImpl {
+        template<typename CONTEXT>
+        struct Impl {
+            typedef ROOT   Root;
+            static constexpr bool SATISFIED = CHECK::ALL_REQS_SATISFIED;
+            static std::string error_string() {
+                return CHECK::unsat_diagnostic_string();
+            }
+        };
+    };
+
+    template<typename STATE>
+    struct CullFinalize {
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type        TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type         ImplMap;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraits>::type ReqTraits;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImpls>::type  ReqImpls;
+
+        typedef typename TraitMap::template FilterKeys<ReqTraits::template HasItem>::type UpdatedTraitMap;
+        typedef typename ImplMap ::template FilterKeys<ReqImpls ::template HasItem>::type UpdatedImplMap;
+
+        typedef typename STATE
+                ::template SetItem<context::key::TraitMap,UpdatedTraitMap>::type
+                ::template SetItem<context::key::ImplMap, UpdatedImplMap>::type
+                ::template RemoveItem<context::key::cull::ReqTraits>::type
+                ::template RemoveItem<context::key::cull::ReqImpls>::type
+                ::template RemoveItem<context::key::cull::ReqTraitFrontier>::type
+                ::template RemoveItem<context::key::cull::ReqImplFrontier>::type
+                type;
+    };
+
+
+    template<typename STATE>
+    struct CullRecurse {
+
+        // Get relevant fields from STATE
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
+        typedef typename STATE::template ItemAt<context::key::UnculledMap>::type     UnculledMap;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraits>::type ReqTraits;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImpls>::type  ReqImpls;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqTraitFrontier>::type ReqTraitFrontier;
+        typedef typename STATE::template ItemAt<context::key::cull::ReqImplFrontier>::type  ReqImplFrontier;
+
+        // Add current frontier to the set of known traits
+        typedef typename ReqTraits::template Union<ReqTraitFrontier>::type UpdatedReqTraits;
+        typedef typename ReqImpls ::template Union<ReqImplFrontier> ::type UpdatedReqImpls;
+
+        // Create filters to find the new frontier
+        typedef typename container::util::Negate<UpdatedReqTraits::MapType::template HasKey> TraitIsNotKnown; 
+        typedef typename container::util::Negate<UpdatedReqImpls ::MapType::template HasKey> ImplIsNotKnown; 
+        
+        // Find next frontiers
+        typedef typename ReqTraitFrontier
+                ::template Map<UnculledMap::TraitMap::template ItemAt>::type // Lookup impls for each trait
+                ::template Fold<container::TypeSet<>,container::util::type_set::BinaryUnion>::type // Combine into a new set
+                ::template Filter<ImplIsNotKnown::template Template>::type // Filter out already-visited impls
+                UpdatedReqImplFrontier;
+        
+        typedef typename ReqImplFrontier
+                ::template Map<UnculledMap::ImplMap::template ItemAt>::type // Lookup traits for each impl
+                ::template Fold<container::TypeSet<>,container::util::type_set::BinaryUnion>::type // Combine into a new set
+                ::template Filter<TraitIsNotKnown::template Template>::type // Filter out already-visited traits
+                UpdatedReqTraitFrontier;
+              
+        // Determine if anything necessary was unsatisfied
+        static constexpr bool EMPTY_TRAIT_FRONTIER = UpdatedReqTraitFrontier::MapType::ITEM_COUNT == 0;
+        static constexpr bool EMPTY_IMPL_FRONTIER  = UpdatedReqImplFrontier::MapType::ITEM_COUNT == 0;
+        static constexpr bool EMPTY_FRONTIER = EMPTY_TRAIT_FRONTIER && EMPTY_IMPL_FRONTIER;
+
+        // Insert an additional CullRecurse if the new frontier is non-empty
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
+        typedef typename container::TypeArray <
+                typename TformQueue::template PushFront<Meta<CullRecurse>>::type,
+                typename TformQueue::template PushFront<Meta<CullFinalize>>::type
+            >::template ItemAt<EMPTY_FRONTIER>::type
+            UpdatedTformQueue;
+
+        // Return updated state
+        typedef typename STATE
+                ::template SetItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                ::template SetItem<context::key::cull::ReqTraits,UpdatedReqTraits>::type
+                ::template SetItem<context::key::cull::ReqImpls, UpdatedReqImpls>::type
+                ::template SetItem<context::key::cull::ReqTraitFrontier,UpdatedReqTraitFrontier>::type
+                ::template SetItem<context::key::cull::ReqImplFrontier, UpdatedReqImplFrontier>::type
+                type;
+
+    };
+
+
+    template<typename STATE>
+    struct Cull {
+
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type  ImplMap;
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type
+                ::template Filter<TraitMap::template HasKey>::type
+                ReqSet;
+        typedef DependencyMap<TraitMap,ImplMap> UnculledMap;
+
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type  TformQueue;
+        typedef typename TformQueue::template PushFront<Meta<CullRecurse>>::type     UpdatedTformQueue;
+
+        typedef typename STATE
+                ::template SetItem<context::key::UnculledMap,UnculledMap>::type
+                ::template SetItem<context::key::TransformQueue,UpdatedTformQueue>::type
+                ::template SetItem<context::key::cull::ReqTraits,container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqImpls, container::TypeSet<>>::type
+                ::template SetItem<context::key::cull::ReqTraitFrontier,ReqSet>::type
+                ::template SetItem<context::key::cull::ReqImplFrontier, container::TypeSet<>>::type
+                type;
+    };
+
+
+
+    // Sets up and evaluates satisfiability checks through UnsatRecurse
+    //
+    // Provides diagnostics to show unsatisfiable elements
+    template<typename STATE>
+    struct Check {
+        
+        // Get relevant fields from STATE
+        typedef typename STATE::template ItemAt<context::key::RequirementSet>::type ReqSet;
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type       TraitMap;
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type        ImplMap;
+        typedef typename STATE::template ItemAt<context::key::UnprunedMap>::type    UnprunedMap;
+        typedef typename STATE::template ItemAt<context::key::TransformQueue>::type TformQueue;
+
+        // Set up filters to find unsatisfied traits/impls
+        typedef typename container::util::Negate<TraitMap::template HasKey> TraitIsNotSat; 
+        typedef typename container::util::Negate<ImplMap ::template HasKey> CompIsNotSat; 
+        
+        // Find unsatisfied traits and implementations
+        typedef typename UnprunedMap::TraitMap::template FilterKeys<TraitIsNotSat::template Template>::type UnsatTraitMap;
+        typedef typename UnprunedMap::ImplMap::template  FilterKeys<CompIsNotSat ::template Template>::type  UnsatImplMap;
+
+        // Find the set of unsatisfied requirements
+        typedef typename ReqSet::template Intersection<typename UnsatTraitMap::KeySet>::type TopLevelUnsatReqs;
+        
+        // Set up the input for UnsatRecurse
+        typedef typename STATE
+                ::template SetItem<context::key::unsat::Traits,typename UnsatTraitMap::KeySet>::type
+                ::template SetItem<context::key::unsat::Impls,typename UnsatImplMap::KeySet>::type
+                ::template SetItem<context::key::unsat::ReqTraitFrontier,TopLevelUnsatReqs>::type
+                ::template SetItem<context::key::unsat::ReqImplFrontier,container::TypeSet<>>::type
+                ::template SetItem<context::key::unsat::ReqTraits,container::TypeSet<>>::type
+                ::template SetItem<context::key::unsat::ReqImpls,container::TypeSet<>>::type
+                ::template SetItem<context::key::TransformQueue,container::TypeArray<Meta<UnsatRecurse>>>::type
+                UnsatStateInput;
+
+        // Evaluate UnsatRecurse
+        typedef typename EvalTransform<UnsatStateInput>::type UnsatState;
+        
+        // Get set of traits/impls that are both necessary an unsatisfied
+        typedef typename UnsatState::template ItemAt<context::key::unsat::ReqTraits>::type ReqUnsatTraits;
+        typedef typename UnsatState::template ItemAt<context::key::unsat::ReqImpls>::type  ReqUnsatImpls;
+              
+        // Determine if anything necessary was unsatisfied
         static constexpr bool SOME_TRAITS_UNSATISFIED = UnsatTraitMap::ITEM_COUNT > 0;
         static constexpr bool SOME_IMPLS_UNSATISFIED  = UnsatImplMap::ITEM_COUNT > 0;
-        
-        static constexpr bool ALL_REQS_SATISFIED   = (ReqUnsat::TraitSet::MapType::ITEM_COUNT + ReqUnsat::ImplSet::MapType::ITEM_COUNT) == 0;
-   
+        static constexpr bool ALL_REQS_SATISFIED   = (ReqUnsatTraits::MapType::ITEM_COUNT + ReqUnsatImpls::MapType::ITEM_COUNT) == 0;
 
+        // Update and return the state
+        typedef typename UnsatState
+                ::template SetItem<context::key::CheckInfo,Check<STATE>>::type
+                ::template SetItem<context::key::TransformQueue,TformQueue>::type
+                type;
+  
+ 
+        // Lists the types in the provided TYPE_ARRAY
         template<typename TYPE_ARRAY>
         static std::string type_list_string() {
+            // List is traversed recursively
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
                 return "[Nothing]";
             } else {
@@ -448,30 +605,33 @@ namespace context {
             }
         }
 
+        // Indicates that UNSAT_TRAIT is not implemented, and lists implementation candidates
         template<typename UNSAT_TRAIT>
         static std::string unsat_trait_diagnostic() {
             std::string trait_name = container::repr::type_name<UNSAT_TRAIT>();
             std::string result = std::string("Trait '")+trait_name+"' is not implemented. Implementation candidates include: ";
             
-            typedef typename FULL_MAP::TraitMap::template ItemAt<UNSAT_TRAIT>::type ImplSet;
+            typedef typename UnprunedMap::TraitMap::template ItemAt<UNSAT_TRAIT>::type ImplSet;
             typedef typename ImplSet::template Intersection<typename UnsatImplMap::KeySet>::type::MapType::KeyArray UnsatCompArray;
             
             result += type_list_string<UnsatCompArray>();
             return result;
         }
 
+        // Indicates that UNSAT_COMP does not have all requirements satisfied, and lists
+        // the unsatisfied traits
         template<typename UNSAT_COMP>
         static std::string unsat_comp_diagnostic() {
             std::string comp_name = container::repr::type_name<UNSAT_COMP>();
             std::string result = std::string("Component '") + comp_name + "' requires traits that have not been implemented. The traits: ";
 
-            typedef typename FULL_MAP::ImplMap::template ItemAt<UNSAT_COMP>::type TraitSet;
+            typedef typename UnprunedMap::ImplMap::template ItemAt<UNSAT_COMP>::type TraitSet;
             typedef typename TraitSet::template Intersection<typename UnsatTraitMap::KeySet>::type::MapType::KeyArray UnsatTraitArray;
             result += type_list_string<UnsatTraitArray>();
             return result;
         }
 
-
+        // Prints diagnostic messages for each unsatisfied trait 
         template<typename TYPE_ARRAY>
         static std::string unsat_trait_list_string() {
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
@@ -487,6 +647,7 @@ namespace context {
             }
         }
 
+        // Prints diagnostic messages for each unsatisfied implementation
         template<typename TYPE_ARRAY>
         static std::string unsat_comp_list_string() {
             if constexpr (TYPE_ARRAY::MapType::ITEM_COUNT == 0) {
@@ -501,31 +662,11 @@ namespace context {
                 return result; 
             }
         }
-
+        
+        // Print diagnostic messages for each unsatisfied trait/impl 
         static std::string unsat_diagnostic_string() {
-            /*
-            std::cout << "Pruned traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename PRUNED_MAP::TraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Pruned impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename PRUNED_MAP::ImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "Original traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename FULL_MAP::TraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Original impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename FULL_MAP::ImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "Unsat traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<UnsatTraitMap>::repr_node().to_string() << std::endl;
-            std::cout << "Unsat impls s:"<<std::endl;
-            std::cout<< container::repr::StringRepr<UnsatImplMap>::repr_node().to_string() << std::endl;
-            std::cout << "ReqUnsat traits:"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename ReqUnsat::TraitSet>::repr_node().to_string() << std::endl;
-            std::cout << "ReqUnsat impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename ReqUnsat::ImplSet>::repr_node().to_string() << std::endl;
-            
-            std::cout << "ReqUnsat impls :"<<std::endl;
-            std::cout<< container::repr::StringRepr<typename SolutionSequence<UnsatSearch>::Result>::repr_node().to_string() << std::endl;
-            */
-            typedef typename ReqUnsat::TraitSet::MapType::KeyArray TraitArray;
-            typedef typename ReqUnsat::ImplSet ::MapType::KeyArray ImplArray;
+            typedef typename ReqUnsatTraits::MapType::KeyArray TraitArray;
+            typedef typename ReqUnsatImpls::MapType::KeyArray ImplArray;
             return unsat_trait_list_string<TraitArray>() + unsat_comp_list_string<ImplArray>();
         }
         
@@ -534,42 +675,23 @@ namespace context {
     };
 
 
-    template<typename MODULE_TYPE>
-    struct SubModule {
-        static_assert(
-                IsModule<MODULE_TYPE>::value,
-                "Only types that implement the Module interface may serve as arguments to the SubModule trait."
-        );
-    };
-
 
     template<typename... ARGS>
     struct Context;
 
-    template<typename... ARGS>
-    struct ParentContext;
 
-    template<typename TRAIT_MAP>
-    struct TraitMapAsModuleBundle {
-        //typedef typename TraitMap::template FilterKeys<Meta<ParentContext>::Generalizes>::type ParentTraitMap;
-        //typedef TraitMap::template FilterKeys<container::util::Negate<Meta<ParentContext>::Generalizes>> LocalTraitMap; 
+    // Will eventually be used to allow contexts to contain other "parent"
+    // contexts as components.
+    template <typename...ARGS>
+    struct BaseContext;
+
+    template <typename...ARGS>
+    struct BaseContext <Context<ARGS...>> {
+        typedef Context<ARGS...> Type;
+        Type& ref;
     };
+    
 
-
-    struct ContextInfo {};
-
-    template<typename ROOT, typename CHECK, typename SOLVER>
-    struct ContextInfoImpl {
-        template<typename CONTEXT>
-        struct Impl {
-            typedef ROOT   Root;
-            typedef SOLVER Solver;
-            static constexpr bool SATISFIED = CHECK::ALL_REQS_SATISFIED;
-            static std::string error_string() {
-                return CHECK::unsat_diagnostic_string();
-            }
-        };
-    };
 
     template<typename COMPONENT>
     struct ContextComponent : COMPONENT {
@@ -621,7 +743,6 @@ namespace context {
         ContextComponent<typename UnMeta<COMPONENTS,Context<TRAIT_MAP,COMPONENTS...>>::Type>...
     {
         
-        
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
         typedef TRAIT_MAP TraitMap;
 
@@ -639,7 +760,12 @@ namespace context {
         template<typename TRAIT>
         ComponentLookup<TRAIT>& as() {
             if constexpr (TRAIT_MAP::template has_key<TRAIT>()) {
-                return *static_cast<ComponentLookup<TRAIT>*>(this);
+                typedef ComponentLookup<TRAIT> COMPONENT;
+                if constexpr (Meta<BaseContext>::Generalizes<COMPONENT>::value) {
+                    return (*static_cast<ComponentLookup<TRAIT>*>(this)).ref.template as<TRAIT>();
+                } else {
+                    return *static_cast<ComponentLookup<TRAIT>*>(this);
+                }
             } else {
                 throw 1;
             }
@@ -653,29 +779,6 @@ namespace context {
     };
 
 
-    template<typename TRAIT_MAP,typename...COMPONENTS>
-    struct ParentContext <Context<TRAIT_MAP,COMPONENTS...>> {
-        //typedef Context<TRAIT_MAP,COMPONENTS...> ParentType;
-        //ParentType& parent_ref;
-    };
-
-
-
-
-
-    template<typename TRAIT, typename IMPL_ARRAY>
-    struct BindPriority {
-        typedef TRAIT Trait;
-        typedef IMPL_ARRAY ImplArray;
-    };
-
-
-    template<typename PRUNED>
-    struct EagerSolve {
-        typedef typename PRUNED::TraitMap::template MapItems<container::util::type_set::GetFirst>::type TraitMap; 
-        typedef typename TraitMap::Invert::type::KeySet ComponentSet;
-    };
-
     template<typename TRAIT_MAP, typename COMPONENT_SET>
     struct ContextFromComponents;
 
@@ -685,45 +788,96 @@ namespace context {
     };
     
 
-    template<bool VALID, typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
-    struct ContextSolveGuard;
+    template<typename STATE, typename ENABLE=void>
+    struct Reify;
    
-    template<typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
-    struct ContextSolveGuard <true,ROOT,PRUNED_DEP_MAP,CHECK,SOLVER>
-    {
-        typedef typename SOLVER::template Template<PRUNED_DEP_MAP>::Type Solution;
+    template<typename STATE>
+    struct Reify <
+        STATE,
+        typename std::enable_if<STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+    > {
+        typedef typename STATE::template ItemAt<context::key::TraitMap>::type    UnculledTraitMap;
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
+        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
 
-        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>>
-                                  ::template LossyCombine<typename Solution::TraitMap>::type TraitMap;
+        typedef typename UnculledTraitMap::template MapItems<container::util::type_set::GetFirst>::type CulledTraitMap; 
+        typedef typename CulledTraitMap::Invert::type::KeySet BaseComponentSet;
+
+        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>>
+                                  ::template LossyCombine<CulledTraitMap>::type TraitMap;
         
-        typedef typename container::TypeSet<Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>
-                                  ::template Union<typename Solution::ComponentSet>::type ComponentSet;
+        typedef typename container::TypeSet<Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>
+                                  ::template Union<BaseComponentSet>::type ComponentSet;
 
 
-        typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type type;
+        typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
+
+        typedef typename STATE::template SetItem<context::key::ContextType,ContextType>::type type;
+
     };
+
    
-    template<typename ROOT, typename PRUNED_DEP_MAP, typename CHECK, typename SOLVER>
-    struct ContextSolveGuard <false,ROOT,PRUNED_DEP_MAP,CHECK,SOLVER>
-    {
-        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>>> TraitMap;
-        typedef container::TypeSet<Meta<ContextInfoImpl<ROOT,CHECK,SOLVER>::template Impl>> ComponentSet;
-        typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type type;
+    template<typename STATE>
+    struct Reify <
+        STATE,
+        typename std::enable_if<! STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+    > {
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
+        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
+        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>> TraitMap;
+        typedef container::TypeSet<Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>> ComponentSet;
+
+        typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
+
+        typedef typename STATE::template SetItem<context::key::ContextType,ContextType>::type type;
     };
 
 
-    template<typename ROOT, typename REQS, typename SOLVER>
+    /*
+    template<typename STATE>
+    struct ComponentTransform {
+        typedef typename STATE::template ItemAt<context::key::ImplMap>::type ImplMap;
+        typedef typename ImplMap
+                ::template FilterKeys<>::type
+                ::KeySet
+                ::template Map<>::type
+                TformSet;
+        
+    };
+    */
+
+
+    template<typename STATE>
     struct CreateContextType {
 
-        typedef typename context::DepMapBuild<ROOT,REQS>::Result        DepMap;
-        typedef typename context::Prune<DepMap>::Result                 PrunedDepMap;
-        typedef          context::DepMapCheck<REQS,DepMap,PrunedDepMap> Check;
-        typedef typename ContextSolveGuard<Check::ALL_REQS_SATISFIED,ROOT,PrunedDepMap,Check,SOLVER>::type type;
+        typedef container::TypeArray<
+            Meta<Search>,
+            // (user-provided transforms invoked here)
+            Meta<Prune>,
+            Meta<Cull>, 
+            Meta<Check>,
+            Meta<Reify>
+        > DefaultTformQueue;
+
+        typedef typename STATE
+                         ::template DefaultItem<context::key::TraitMap,container::TypeMap<>>::type
+                         ::template DefaultItem<context::key::ImplMap,container::TypeMap<>>::type
+                         ::template DefaultItem<context::key::TransformQueue,DefaultTformQueue>::type
+                         InputState;
+
+        typedef typename context::EvalTransform<InputState>::type State;
+
+        #ifdef HARMONIZE_TRACK_SEQUENCE
+        typedef typename context::EvalTransform<InputState>::Sequence Sequence;
+        #endif
+
+        typedef typename State::template ItemAt<context::key::ContextType>::type type;
 
     };
 
-
 }
+
+
 
 template<
     typename TRAIT,
@@ -756,7 +910,7 @@ constexpr bool implements_trait() {
 
 
 template<typename TRAIT,typename CTX>
-using As = CTX::template ComponentLookup<TRAIT>;
+using As = typename CTX::template ComponentLookup<TRAIT>;
 
 
 
@@ -764,30 +918,15 @@ using As = CTX::template ComponentLookup<TRAIT>;
 namespace container {
 namespace repr {
 
-    template<
-        typename ROOT,
-        typename REQ_SET,
-        typename TRAIT_MAP,
-        typename IMPL_MAP
-    > struct StringRepr <
-        context::DepMapBuild<
-            ROOT,
-            REQ_SET,
-            TRAIT_MAP,
-            IMPL_MAP
-        >
-    > {
+    template<typename STATE>
+    struct StringRepr <context::Search<STATE>> {
 
-        typedef context::DepMapBuild<
-            REQ_SET,
-            TRAIT_MAP,
-            IMPL_MAP
-        > Type; 
+        typedef context::Search<STATE> Type; 
         
         static StringReprNode repr_node() {
             return StringReprNode {
-                "DepMapBuild {",
-                StringContentRepr<TypeArray<REQ_SET,TRAIT_MAP,IMPL_MAP>>::repr(),
+                "Search {",
+                StringContentRepr<typename STATE::BindingArray>::repr(),
                 "}"
             };
         }
@@ -816,86 +955,6 @@ namespace repr {
         }
     };
     
-    
-    template<typename TRAIT_MAP, typename IMPL_MAP>
-    struct StringRepr<context::DepMap<TRAIT_MAP,IMPL_MAP>> {
-        typedef context::DepMap<TRAIT_MAP,IMPL_MAP> Type;
-        static StringReprNode repr_node() {
-            return StringReprNode {
-                "DepMap {",
-                StringContentRepr<TypeArray<typename Type::TraitMap, typename Type::ImplMap>>::repr(),
-                "}"
-            };
-        }
-
-        static std::string repr() {
-            return repr_node().to_string();
-        }
-    };
-    
-    
-    template<typename DEP_MAP, typename PREV_DEP_MAP>
-    struct StringRepr<context::Prune<DEP_MAP,PREV_DEP_MAP>> {
-        typedef context::DepMap<DEP_MAP,PREV_DEP_MAP> Type;
-        static StringReprNode repr_node() {
-            return StringReprNode {
-                "Prune {",
-                StringContentRepr<TypeArray<DEP_MAP>>::repr(),
-                "}"
-            };
-        }
-
-        static std::string repr() {
-            return repr_node().to_string();
-        }
-    };
-    
-    template<
-        typename FULL_MAP,
-        typename UNSAT_TRAITS,
-        typename UNSAT_IMPLS,
-        typename FRONTIER_TRAIT_SET,
-        typename FRONTIER_IMPL_SET,
-        typename TRAIT_SET,
-        typename IMPL_SET
-    > struct StringRepr < context::UnsatRecurse <
-        FULL_MAP,
-        UNSAT_TRAITS,
-        UNSAT_IMPLS,
-        FRONTIER_TRAIT_SET,
-        FRONTIER_IMPL_SET,
-        TRAIT_SET,
-        IMPL_SET
-    > > {
-        
-        context::UnsatRecurse <
-            FULL_MAP,
-            UNSAT_TRAITS,
-            UNSAT_IMPLS,
-            FRONTIER_TRAIT_SET,
-            FRONTIER_IMPL_SET,
-            TRAIT_SET,
-            IMPL_SET
-        > Type;
-        
-        static StringReprNode repr_node() {
-            return StringReprNode {
-                "UnsatRecurse {",
-                StringContentRepr<TypeArray<
-                    FRONTIER_TRAIT_SET,
-                    FRONTIER_IMPL_SET,
-                    TRAIT_SET,
-                    IMPL_SET
-                >>::repr(),
-                "}"
-            };
-        }
-
-        static std::string repr() {
-            return repr_node().to_string();
-        }
-
-    };
 
 }
 }

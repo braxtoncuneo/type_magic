@@ -11,7 +11,7 @@ struct AlwaysFalse
 template<typename T>
 struct AlwaysTrue
 {
-    static constexpr bool value = false;
+    static constexpr bool value = true;
 };
 
 template<typename T>
@@ -111,10 +111,22 @@ struct Meta
             container::IsTypeSet<TYPE_SET>::value,
             ASSERT_TEXT("ERROR: Only TypeSet specializations may be passed to Meta's SepecializeFromTypeSet member template.")
         );
-        typedef typename TYPE_SET::SpecializeWith<TEMPLATE>::type type;
+        typedef typename TYPE_SET::template SpecializeWith<TEMPLATE>::type type;
     };
 
 };
+
+
+template<typename TYPE>
+struct IsMeta {
+    static constexpr bool value = false;
+};
+
+template<template <typename...> typename TEMPLATE>
+struct IsMeta<Meta<TEMPLATE>> {
+    static constexpr bool value = true;
+};
+
 
 namespace _util {
 
@@ -132,7 +144,7 @@ struct GetTemplateArgsHelper <TEMPLATE<ARGS...>> {
 
 
 template<typename TYPE>
-using GetTemplateArgs = _util::GetTemplateArgsHelper<TYPE>::type;
+using GetTemplateArgs = typename _util::GetTemplateArgsHelper<TYPE>::type;
 
 
 // Specializes the template provided

@@ -125,7 +125,7 @@ namespace type_set {
     template <typename A, typename B>
     struct BinaryUnion
     {
-        typedef typename A::Union<B>::type type;
+        typedef typename A::template Union<B>::type type;
     };
 
     template<typename TYPE_SET>
@@ -136,6 +136,50 @@ namespace type_set {
             ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
         );
         typedef typename TYPE_SET::MapType::KeyArray::template Front<>::type type;
+    };
+
+    template<typename ITEM>
+    struct HasItem {
+        template <typename TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_SET::template has_item<ITEM>();
+        };
+    };
+
+    template<typename TYPE_SET>
+    struct SharesItemWith {
+        static_assert(
+            IsTypeSet<TYPE_SET>::value,
+            ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+        );
+        template <typename OTHER_TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<OTHER_TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_SET::template Union<OTHER_TYPE_SET>::type::ITEM_COUNT > 0;
+        };
+    };
+
+    template<typename TYPE_SET>
+    struct Exclude {
+        static_assert(
+            IsTypeSet<TYPE_SET>::value,
+            ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+        );
+        template <typename OTHER_TYPE_SET>
+        struct Template {
+            static_assert(
+                IsTypeSet<OTHER_TYPE_SET>::value,
+                ASSERT_TEXT("ERROR: Only TypeSet specializations are valid arguments for this template.")
+            );
+            typedef typename OTHER_TYPE_SET::template Difference<TYPE_SET>::type type;
+        };
     };
 
 }
@@ -164,7 +208,19 @@ namespace type_map {
     template <typename A, typename B>
     struct BinaryCombine
     {
-        typedef typename A::Combine<B>::type type;
+        typedef typename A::template Combine<B>::type type;
+    };
+    
+    template<typename KEY>
+    struct HasKey {
+        template <typename TYPE_MAP>
+        struct Template {
+            static_assert(
+                IsTypeMap<TYPE_MAP>::value,
+                ASSERT_TEXT("ERROR: Only TypeMap specializations are valid arguments for this template.")
+            );
+            static constexpr bool value = TYPE_MAP::template has_key<KEY>();
+        };
     };
 
     template <typename A, typename B>
@@ -173,16 +229,63 @@ namespace type_map {
         typedef typename A::template FoldCombine<B,type_set::BinaryUnion>::type type;
     };
 
+    template <typename MAP, typename ENABLE=void>
+    struct Sort;
+
+    template <typename HEAD, typename... TAIL>
+    struct Sort<
+        TypeMap<HEAD,TAIL...>,
+        typename std::enable_if<sizeof(typename HEAD::ItemType)>=sizeof(typename Sort<TypeMap<TAIL...>>::BiggestBinding::ItemType)>::type
+    > {
+        typedef HEAD BiggestBinding;
+        typedef TypeMap<TAIL...> Remainder;
+        typedef typename Sort<Remainder>::type RemainderSorted;
+        typedef typename TypeMap<BiggestBinding>::template LossyCombine<RemainderSorted>::type type;
+    };
+
+    template <typename HEAD, typename... TAIL>
+    struct Sort<
+        TypeMap<HEAD,TAIL...>,
+        typename std::enable_if<sizeof(typename HEAD::ItemType)<sizeof(typename Sort<TypeMap<TAIL...>>::BiggestBinding::ItemType)>::type
+    > {
+        typedef TypeMap<TAIL...> TailType;
+        typedef typename Sort<TailType>::BiggestBinding BiggestBinding;
+        typedef typename Sort<TailType>::Remainder      TailRemainder;
+        typedef typename TypeMap<HEAD>::template LossyCombine<TailRemainder>::type Remainder;
+        typedef typename Sort<Remainder>::type RemainderSorted;
+        typedef typename TypeMap<BiggestBinding>::template LossyCombine<RemainderSorted>::type type;
+    };
+
+
+    template <typename MAP, typename ENABLE=void>
+    struct DefaultStructOrder;
+
+    template <typename MAP>
+    struct DefaultStructOrder<
+        MAP,
+        typename std::enable_if<config::REORDER_STRUCT_MEMBERS>::type
+    > {
+        typedef typename Sort<MAP>::type type;
+    };
+
+    template <typename MAP>
+    struct DefaultStructOrder<
+        MAP,
+        typename std::enable_if<!config::REORDER_STRUCT_MEMBERS,typename AlwaysVoid<MAP>::type>::type
+    > {
+        typedef MAP type;
+    };
+
 }
 
 
-    template <template <typename> typename FUNC>
-    struct Negate {
-        template<typename TYPE>
-        struct Template {
-            static constexpr bool value = !FUNC<TYPE>::value;
-        };
+template <template <typename> typename FUNC>
+struct Negate {
+    template<typename TYPE>
+    struct Template {
+        static constexpr bool value = !FUNC<TYPE>::value;
     };
+};
 
 
 }
@@ -260,8 +363,8 @@ namespace repr {
         static_assert(IsTypeArray<TYPE>::value,"Only TypeArrays may be supplied.");
 
         static void repr_recurse(std::vector<StringReprNode> &result) {
-            result.push_back(StringRepr<typename TYPE::Front<>::type>::repr_node());
-            StringContentRepr<typename TYPE::PopFront<>::type>::repr_recurse(result);
+            result.push_back(StringRepr<typename TYPE::template Front<>::type>::repr_node());
+            StringContentRepr<typename TYPE::template PopFront<>::type>::repr_recurse(result);
         }
 
         static std::vector<StringReprNode> repr() {
@@ -381,6 +484,38 @@ namespace repr {
 ///////////////////////////////////////////////////////////////////////////////
 
 
+namespace util {
+
+    template <typename KEY>
+    struct _TypeTag {};
+
+    template <size_t INDEX,typename ITEM>
+    struct _IndexedTypeTag : _TypeTag<ITEM> {};
+
+    template <typename INDEX_PACK,typename... TYPES>
+    struct _TypePackInfoHelper;
+   
+    template <size_t... INDEXES, typename... TYPES>
+    struct _TypePackInfoHelper <
+        std::index_sequence<INDEXES...>,
+        TYPES...
+    > : _IndexedTypeTag<INDEXES,TYPES>...
+    {};
+
+    template <typename... TYPES>
+    struct TypePackInfo {
+        typedef _TypePackInfoHelper<std::make_index_sequence<sizeof...(TYPES)>,TYPES...> Helper;
+
+        template<typename QUERY>
+        static constexpr bool has_type() {
+            return std::is_base_of<_TypeTag<QUERY>,Helper>::value;
+        }
+
+        static constexpr bool has_duplicates = ! std::is_standard_layout<Helper>::value;
+    };
+
+
+}
 
 
 template<typename KEY, typename ITEM>
@@ -401,9 +536,39 @@ struct Binding
 };
 
 
+
+
+namespace type_map {
+
+
+    template <typename KEY, typename ITEM>
+    static Binding<KEY, ITEM> _lookup_helper(Binding<KEY, ITEM>) {}
+
+    template <typename KEY, typename... BINDINGS>
+    struct Lookup {
+        typedef typename decltype(_lookup_helper<KEY>(TypeMap<BINDINGS...>{}))::ItemType type;
+    };
+    
+    template <typename... LEFT_BINDINGS, typename... RIGHT_BINDINGS>
+    constexpr TypeMap<LEFT_BINDINGS...,RIGHT_BINDINGS...>  operator| (TypeMap<LEFT_BINDINGS...> left, TypeMap<RIGHT_BINDINGS...> right);
+    
+    template <template<typename>typename MAPPER, typename... BINDINGS>
+    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input);
+
+    template <template<typename>typename FILTER,typename BINDING>
+    constexpr auto filter_element(TypeMap<BINDING> input);
+
+    template<template<typename>typename FILTER,typename... BINDINGS>
+    constexpr auto filter(TypeMap<BINDINGS...> input);
+
+}
+
+
+
+
 // Base case
 template<typename... BINDINGS>
-struct TypeMap
+struct TypeMap 
 {
 
     typedef TypeSet  <>  KeySet;
@@ -550,19 +715,46 @@ struct TypeMap
         typedef TypeMap<> type;
     };
 
+    template <typename PHONEY=void>
     struct Sort {
         typedef TypeMap<> type;
+        typedef Binding<void,char> BiggestItem;
     };
 
     struct DefaultStructOrder {
         typedef TypeMap<> type;
     };
 
+    template<typename KEY,typename NEW_ITEM>
+    struct UpdateItem {
+        static_assert(
+            AlwaysFalse<KEY>::value,
+            ASSERT_TEXT("Key does not exist in TypeMap.")
+        );
+    };
+
+    template<typename KEY,typename ITEM>
+    struct SetItem {
+        typedef TypeMap<Binding<KEY,ITEM>> type;
+    };
+
+    template<typename KEY, typename ITEM>
+    struct DefaultItem {
+        typedef TypeMap<Binding<KEY,ITEM>> type;
+    };
+
+    template<typename KEY>
+    struct RemoveItem {
+        typedef TypeMap<> type;
+    };
+
 };
+
+
 
 // Recursive case
 template<typename HEAD, typename... TAIL>
-struct TypeMap <HEAD,TAIL...>
+struct TypeMap <HEAD,TAIL...> : HEAD, TAIL...
 {
 
     static_assert(
@@ -583,42 +775,28 @@ struct TypeMap <HEAD,TAIL...>
 
     static constexpr size_t ITEM_COUNT = TailType::ITEM_COUNT + 1;
 
+
+
     template<typename KEY>
     static constexpr bool has_key()
     {
-        if constexpr (std::is_same<KEY,HeadKeyType>::value) {
-            return true;
-        } else {
-            return TailType::template has_key<KEY>();
-        }
+        return util::TypePackInfo<typename HEAD::KeyType,typename TAIL::KeyType...>::template has_type<KEY>();
     }
 
     template<typename ITEM>
     static constexpr bool has_item()
     {
-        if constexpr (std::is_same<ITEM,HeadItemType>::value) {
-            return true;
-        } else {
-            return TailType::template has_item<ITEM>();
-        }
+        return util::TypePackInfo<typename HEAD::ItemType,typename TAIL::ItemType...>::template has_type<ITEM>();
     }
 
     static constexpr bool has_duplicate_key()
     {
-        if constexpr (TailType::template has_key<HeadKeyType>()) {
-            return true;
-        } else {
-            return TailType::has_duplicate_key();
-        }
+        return util::TypePackInfo<typename HEAD::KeyType,typename TAIL::KeyType...>::has_duplicates;
     }
 
     static constexpr bool has_duplicate_item()
     {
-        if constexpr (TailType::template has_item<HeadItemType>()) {
-            return true;
-        } else {
-            return TailType::has_duplicate_item();
-        }
+        return util::TypePackInfo<typename HEAD::ItemType,typename TAIL::ItemType...>::has_duplicates;
     }
 
     static_assert(
@@ -640,7 +818,11 @@ struct TypeMap <HEAD,TAIL...>
         KEY_QUERY,
         typename std::enable_if<!(std::is_same<HeadKeyType,KEY_QUERY>::value)>::type
     > {
-        typedef typename TailType::template ItemAt<KEY_QUERY>::type type;
+        static_assert(
+            has_key<KEY_QUERY>(),
+            ASSERT_TEXT("Key does not exist in type map.")
+        );
+        typedef typename type_map::Lookup<KEY_QUERY,HEAD,TAIL...>::type type;
     };
 
     template <typename KEY_QUERY>
@@ -697,8 +879,8 @@ struct TypeMap <HEAD,TAIL...>
     > {
         typedef TypeMap<ITEMS...> Other;
         typedef HeadItemType OurItem;
-        typedef TypeMap<ITEMS...>::template ItemAt<HeadKeyType>::type TheirItem;
-        typedef FOLDER<OurItem,TheirItem>::type CombinedItem;
+        typedef typename TypeMap<ITEMS...>::template ItemAt<HeadKeyType>::type TheirItem;
+        typedef typename FOLDER<OurItem,TheirItem>::type CombinedItem;
 
         template<typename TYPE>
         struct Mapper {
@@ -743,23 +925,9 @@ struct TypeMap <HEAD,TAIL...>
         typedef typename LossyCombineType::type type;
     };
 
-    template <template<typename> typename SELECTOR,typename ENABLE=void>
-    struct Filter;
-
     template <template<typename> typename SELECTOR>
-    struct Filter <
-        SELECTOR,
-        typename std::enable_if<SELECTOR<HEAD>::value>::type
-    > {
-        typedef typename TypeMap<HEAD>::Combine<typename TailType::Filter<SELECTOR>::type>::type type;
-    };
-
-    template <template<typename> typename SELECTOR>
-    struct Filter <
-        SELECTOR,
-        typename std::enable_if<!(SELECTOR<HEAD>::value)>::type
-    > {
-        typedef typename TailType::Filter<SELECTOR>::type type;
+    struct Filter {
+        typedef decltype(type_map::filter<SELECTOR>(SelfType{})) type;
     };
 
     template <template<typename> typename SELECTOR>
@@ -784,7 +952,8 @@ struct TypeMap <HEAD,TAIL...>
 
     template <template<typename> typename MAPPER>
     struct Map {
-        typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
+        typedef TypeMap<typename MAPPER<HEAD>::type,typename MAPPER<TAIL>::type...> type;
+        //typedef typename TypeMap<typename MAPPER<HEAD>::type>::template Combine<TypeMap<typename MAPPER<TAIL>::type ...>>::type type;
     };
 
     template <template<typename> typename MAPPER>
@@ -828,67 +997,118 @@ struct TypeMap <HEAD,TAIL...>
         typedef typename Fold<BASE,FoldAdapter>::type type;
     };
 
+    template<typename KEY,typename NEW_ITEM>
+    struct UpdateItem {
+        static_assert(
+            has_key<KEY>(),
+            ASSERT_TEXT("Key does not exist in TypeMap.")
+        );
+
+        template <typename TYPE>
+        struct Modifier {
+            typedef TYPE type;
+        };
+
+        template <typename ITER_ITEM>
+        struct Modifier <Binding<KEY,ITER_ITEM>>{
+            typedef Binding<KEY,NEW_ITEM> type;
+        };
+
+        typedef typename TypeMap<HEAD, TAIL...>::template Map<Modifier>::type type;
+    };
+    
+    template<typename KEY,typename ITEM,typename ENABLE=void>
+    struct SetItem;
+   
+    template<typename KEY,typename ITEM>
+    struct SetItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<has_key<KEY>()>::type
+    > {
+        typedef typename UpdateItem<KEY,ITEM>::type type;
+    };
+   
+    template<typename KEY,typename ITEM>
+    struct SetItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<!has_key<KEY>()>::type
+    > {
+        typedef TypeMap<container::Binding<KEY,ITEM>,HEAD,TAIL...> type;
+    };
+    
+    template<typename KEY,typename ITEM,typename ENABLE=void>
+    struct DefaultItem;
+   
+    template<typename KEY,typename ITEM>
+    struct DefaultItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<has_key<KEY>()>::type
+    > {
+        typedef TypeMap<HEAD, TAIL...> type;
+    };
+   
+    template<typename KEY,typename ITEM>
+    struct DefaultItem <
+        KEY,
+        ITEM,
+        typename std::enable_if<!has_key<KEY>()>::type
+    > {
+        typedef TypeMap<container::Binding<KEY,ITEM>,HEAD,TAIL...> type;
+    };
+
+
+    template<typename KEY>
+    struct RemoveItem {
+        template<typename TYPE>
+        struct IsNotKey {
+            static constexpr bool value = !std::is_same<TYPE,KEY>::value;
+        };
+
+        typedef typename SelfType::template Filter<IsNotKey>::type type;
+    };
+
 
     struct Invert {
         typedef typename TypeMap<Binding<HeadItemType,HeadKeyType>>::template LossyCombine<typename TailType::Invert::type>::type type;
     };
 
-    template <typename PHONEY=void, typename ENABLE=void>
-    struct SortHelper;
-
-    template <typename PHONEY>
-    struct SortHelper<
-        PHONEY,
-        typename std::enable_if<sizeof(HeadItemType)>=sizeof(typename TailType::template SortHelper<>::BiggestItem::ItemType),PHONEY>::type
-    > {
-        typedef HEAD     BiggestItem;
-        typedef TailType Remainder;
-        typedef typename Remainder::Sort::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
-    };
-
-    template <typename PHONEY>
-    struct SortHelper<
-        PHONEY,
-        typename std::enable_if<sizeof(HeadItemType)<sizeof(typename TailType::template SortHelper<>::BiggestItem::ItemType),PHONEY>::type
-    > {
-        typedef typename TailType::template SortHelper<>::BiggestItem BiggestItem;
-        typedef typename TailType::template SortHelper<>::Remainder   TailRemainder;
-        typedef typename TypeMap<HEAD>::template LossyCombine<TailRemainder>::type Remainder;
-        typedef typename Remainder::Sort::type RemainderSorted;
-        typedef typename TypeMap<BiggestItem>::template LossyCombine<RemainderSorted>::type type;
-    };
-
-    struct Sort {
-        typedef typename SortHelper<>::type type;
-    };
-
-
-    template <typename PHONEY=void, typename ENABLE=void>
-    struct DefaultStructOrderHelper;
-
-    template <typename PHONEY>
-    struct DefaultStructOrderHelper<
-        PHONEY,
-        typename std::enable_if<config::REORDER_STRUCT_MEMBERS,PHONEY>::type
-    > {
-        typedef typename Sort::type type;
-    };
-
-    template <typename PHONEY>
-    struct DefaultStructOrderHelper<
-        PHONEY,
-        typename std::enable_if<(!config::REORDER_STRUCT_MEMBERS),PHONEY>::type
-    > {
-        typedef TypeMap<HEAD,TAIL...> type;
-    };
-
-    struct DefaultStructOrder {
-        typedef typename DefaultStructOrderHelper<>::type type;
-    };
 
 };
 
+
+
+namespace type_map {
+
+    template <typename... LEFT_BINDINGS, typename... RIGHT_BINDINGS>
+    constexpr TypeMap<LEFT_BINDINGS...,RIGHT_BINDINGS...>  operator+ (TypeMap<LEFT_BINDINGS...> left, TypeMap<RIGHT_BINDINGS...> right) {
+        return {};
+    };
+
+
+    template <template<typename>typename MAPPER, typename... BINDINGS>
+    constexpr TypeMap<typename MAPPER<BINDINGS>::type...>  map (TypeMap<BINDINGS...> input) {
+        return {};
+    };
+
+    template <template<typename>typename FILTER,typename BINDING>
+    constexpr auto filter_element(TypeMap<BINDING> input) {
+        if constexpr (FILTER<BINDING>::value) {
+            return TypeMap<BINDING>{};
+        } else {
+            return TypeMap<>{};
+        }
+    }
+
+
+    template<template<typename>typename FILTER,typename... BINDINGS>
+    constexpr auto filter(TypeMap<BINDINGS...> input) {
+        return (TypeMap<>{} + ... + filter_element<FILTER>(TypeMap<BINDINGS>{}));
+    }
+
+}
 
 
 
@@ -899,6 +1119,8 @@ struct TypeSet
 
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
     typedef TypeSet<ELEMENTS...> SelfType;
+
+    static constexpr size_t ITEM_COUNT = MapType::ITEM_COUNT;
 
     static_assert(
         !MapType::has_duplicate_key(),
@@ -1021,9 +1243,14 @@ struct TypeSet
     template <template<typename...> typename TEMPLATE>
     struct CollapseAll {
         typedef typename Filter<Meta<TEMPLATE>::template Generalizes>::type MatchingTypes;
-        typedef typename MatchingTypes::Map<SetFromArgs>::type ArgSets;
+        typedef typename MatchingTypes::template Map<SetFromArgs>::type ArgSets;
         typedef typename ArgSets::template Fold<TypeSet<>,util::type_set::BinaryUnion>::type CombinedSet;
         typedef typename CombinedSet::template SpecializeWith<TEMPLATE>::type type;
+    };
+    
+    template<typename KEY>
+    struct RemoveItem {
+        typedef typename MapType::template RemoveItem<KEY>::type::KeySet type;
     };
     
 };

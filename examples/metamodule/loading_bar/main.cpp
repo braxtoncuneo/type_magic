@@ -154,8 +154,8 @@ struct ProgressDisplayComponent {
         if constexpr ( std::is_same<T,container::TypeSet<>>::value ) {
             return 0;
         } else {
-            using CurrentLabel = typename T::MapType::HeadItemType;
-            float progress = via<CurrentLabel>(this).progress;
+            using CurrentTrait = typename T::MapType::HeadItemType;
+            float progress = via<CurrentTrait>(this).progress;
             std::cout << "["; 
             for (unsigned int i=0; i<width; i++) {
                 if ( (i/(float)width) <= progress ) {
@@ -164,6 +164,7 @@ struct ProgressDisplayComponent {
                     std::cout << " ";
                 }
             }
+            using CurrentLabel = GetTemplateArgs<CurrentTrait>::template ItemAt<0>::type;
             std::cout << "] " << container::repr::type_name<CurrentLabel>() << std::endl; 
             return display_recurse<typename T::MapType::TailType::KeySet>(width) + 1;
         }
@@ -206,8 +207,8 @@ void run()
     {
 
         CTX ctx(
-            As<ExecA, CTX>{1000},
-            As<ExecB, CTX>{1000}
+            init<ExecA>(1000),
+            init<ExecB>(1000)
         );
 
 
@@ -232,17 +233,24 @@ void run()
 
 
 int main() {
+    using namespace container;   
+    using namespace context;   
 
-    typedef typename context::CreateContextType<
-        RootModule,
-        container::TypeSet<
-            ExecA,
-            ExecB,
-            ProgressRelay<ExecA>,
-            ProgressRelay<ExecB>,
-            ProgressDisplay
-        >,
-        Meta<context::EagerSolve>>::type Ctx;
+    typedef TypeMap<
+        Binding<key::RootModule,RootModule>,
+        Binding<
+            key::RequirementSet,
+            container::TypeSet<
+                ExecA,
+                ExecB,
+                ProgressRelay<ExecA>,
+                ProgressRelay<ExecB>,
+                ProgressDisplay
+            >
+        >
+    > InputState;
+
+    typedef typename context::CreateContextType<InputState>::type Ctx;
 
     run<Ctx>();
 

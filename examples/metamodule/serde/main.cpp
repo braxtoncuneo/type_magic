@@ -247,7 +247,7 @@ void run()
     if constexpr (CTX::Info::SATISFIED)
     {
 
-        CTX ctx(As<Log, CTX>{"log.txt"});
+        CTX ctx(init<Log>("out.log"));
 
         int saveValue = 42;
         as<StaticSaveInfo<int>>(ctx).field = saveValue;
@@ -263,11 +263,16 @@ void run()
 }
 int main()
 {
+    
+    using namespace container;   
+    using namespace context;   
 
-    typedef typename context::CreateContextType<
-        RootModule,
-        container::TypeSet<PrimeFind, StaticSaveInfo<int>>,
-        Meta<context::EagerSolve>>::type Ctx;
+    typedef TypeMap<
+        Binding<key::RootModule,RootModule>,
+        Binding<key::RequirementSet,container::TypeSet<PrimeFind, StaticSaveInfo<int>>>
+    > InputState;
+
+    typedef typename context::CreateContextType<InputState>::type Ctx;
 
     run<Ctx>();
 
