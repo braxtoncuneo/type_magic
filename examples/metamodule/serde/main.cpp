@@ -247,7 +247,7 @@ void run()
     if constexpr (CTX::Info::SATISFIED)
     {
 
-        CTX ctx(As<Log, CTX>{"log.txt"});
+        CTX ctx(init<Log>("out.log"));
 
         int saveValue = 42;
         as<StaticSaveInfo<int>>(ctx).field = saveValue;

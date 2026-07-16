@@ -42,7 +42,7 @@ struct StdLog {
     std::ofstream log_file;
 
     StdLog(std::string path) : log_file(path) {}
-    StdLog() : StdLog("log.txt") {}
+    StdLog() : StdLog("out.log") {}
     StdLog(StdLog &&) = default;
 
     template<typename T>
@@ -71,8 +71,8 @@ void run() {
     if constexpr (CTX::Info::SATISFIED) {
         
         CTX ctx(
-            As<FindPrimes,CTX>{1,100},
-            As<Log,CTX>{"my_log.txt"}
+            init<FindPrimes>(1,100),
+            init<Log>("out.log")
         );
 
         as<FindPrimes>(ctx).find_primes();
