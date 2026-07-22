@@ -14,6 +14,7 @@ namespace key {
     struct RequirementSet{};
     struct CheckInfo{};
     struct ContextType{};
+    struct Sequence{};
 
 
     namespace search {

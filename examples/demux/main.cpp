@@ -1,63 +1,65 @@
 #include "../../include/include.h"
 
-#include <fstream>
+#include <cstdint>
 
 
 
 // Traits
 
-template<auto FN>
-struct Fn {
-    static constexpr bool IS_FUNCTION = false;
-};
+struct State{};
 
-template<typename RETURN, typename CLASS, typename... ARGS>
-struct Fn <RETURN (CLASS::*FN)(ARGS...)> {
-    static constexpr bool IS_FUNCTION = true;
-    static constexpr bool IS_NON_STATIC = true;
-    typedef RETURN Return;
-    typedef CLASS Class;
-    typedef container::TypeArray<ARGS...> Args;
-    typedef Return (Class::* NonStaticSignature)(ARGS...);
-    typedef Return FunctionSignature (CLASS*,ARGS...);
-    static constexpr auto non_static_function = FN;
+template<template<typename>typename FN_MIXIN>
+struct Async {};
 
-    static Return function(Class *self, ARGS... args) {
-        return (self->*non_static_function)(args...);
-    }
-};
-
-template<typename RETURN, typename... ARGS>
-struct Fn {
-    static constexpr bool IS_FUNCTION = true;
-    static constexpr bool IS_NON_STATIC = false;
-    typedef RETURN Return;
-    typedef CLASS Class;
-    typedef container::TypeArray<ARGS...> Args;
-    typedef Return FunctionSignature (ARGS...);
-    static constexpr auto function = FN;
-};
-
-
-struct Schedule<typename FN_TRAIT>{};
 
 
 // Helper Templates
 template<typename TYPE>
 struct GetFirstArgument {
-    typedef GetTemplateArgs<TYPE>::template ItemAt<0>::type type;
+    typedef typename GetTemplateArgs<TYPE>::template ItemAt<0>::type type;
 }; 
+
+template<typename TYPE>
+struct IsAsync {
+    static constexpr bool value = false;
+};
+
+template<template<typename>typename FN_MIXIN>
+struct IsAsync <Async<FN_MIXIN>> {
+    static constexpr bool value = false;
+};
+
 
 
 // Components
 template<typename CONTEXT>
-struct ScheduleImpl {
+struct SimpleCPUAsyncImpl {
 
-    typedef typename CONTEXT::TraitMap::KeySet::template Filter<Meta<Schedule>::template Generalizes>::type ScheduleSet;
-    typedef typename ScheduleSet::template Map<GetFirstArgument>::type FunctionSet;
 
-    std::vector<FunctionTaggedUnion> tasks;
+    template<typename TYPE>
+    struct ComponentTypeFromMixin;
 
+    template<template<typename>typename MIXIN>
+    struct ComponentTypeFromMixin <Async<MIXIN>> {
+        typedef container::Fn<MIXIN<CONTEXT>::operator()> type;
+    };
+
+    typedef typename CONTEXT::TraitMap::KeySet::template Filter<IsAsync>::type AsyncSet;
+    typedef typename AsyncSet::template Map<ComponentTypeFromMixin>::type FunctionSet;
+    typedef container::ArrayVariant<typename FunctionSet::ArrayType> VariantType;
+    typedef typename VariantType::MapType::template Invert<>::type FnMap;
+
+    std::vector<VariantType> tasks;
+    
+    template<typename FN,typename... ARGS>
+    void call(ARGS... args) {
+        if (FN::IS_STATIC) {
+            tasks.push_back(container::FnObj<typename FnMap::template ItemAt<FN>::type>{}.bind(args...));
+        } else {
+            auto self = &via<FN>(this);
+            tasks.push_back(container::FnObj<typename FnMap::template ItemAt<FN>::type>{self}.bind(args...));
+        }
+    }
 
 
     void exec() {
@@ -70,53 +72,141 @@ struct ScheduleImpl {
 };
 
 
+
+struct StepCounts {
+    std::vector<uint64_t> steps;
+};
+
+
+struct CollazIter {
+    uint64_t value;
+    uint64_t step_count;
+    uint64_t start_value;
+};
+
+template<typename CONTEXT>
+struct Odd;
+
+
 template<typename CONTEXT>
 struct Even {
-    () {
-        return via<TraitY>(this).y;
+
+    void operator()(CollazIter iter) {
+        using namespace container;
+        if (iter.value <= 1) {
+            as<State>(this).steps[iter.start_value] = iter.step_count;
+        } else {
+            iter.value /= 2;
+            iter.step_count ++;
+            if ( (iter.value%2) == 0 ) {
+                as<Async<Even>>(this)(iter);
+            } else {
+                as<Async<Odd>>(this)(iter);
+            }
+        }
     }
+
 };
 
 template<typename CONTEXT>
 struct Odd {
-    int &get_x() {
-        return via<TraitX>(this).x;
+
+    void operator()(CollazIter iter) {
+        using namespace container;
+        if (iter.value <= 1) {
+            as<State>(this).steps[iter.start_value] = iter.step_count;
+        } else {
+            iter.value *= 3;
+            iter.value += 1;
+            iter.step_count ++;
+            as<Async<Even>>(this)(iter);
+        }
     }
+
 };
+ 
+
+
+template<typename CONTEXT>
+struct StartUp {
+
+    void operator()(uint64_t limit) {
+        using namespace container;
+        via<State>(this).steps.resize(limit);
+        for (uint64_t i=0; i<limit; i++) {
+            via<State>(this).steps[i] = 0;
+            if ( (i%2) == 0 ) {
+                via<Async<Even>>(this).template call(CollazIter{i,0,i});
+            } else {
+                via<Async<Odd>>(this).template call(CollazIter{i,0,i});
+            }
+        }
+    }
+
+};
+
 
 
 // Modules
 
+struct CPUAsyncModule {
 
-template<typename>
-struct ScheduleMetaModule;
+    template <typename TRAIT>
+    struct ImplFor {
+        typedef container::TypeMap<> type;
+    };
 
-template<typename FN_TRAIT>
-struct ScheduleMetaModule <Schedule<FN_TRAIT>> {
-    typedef SimpleModule <
-        Meta<ScheduleImpl>,
-        DeMux<Meta<ScheduleImpl>,FN_TRAIT>
-    >
+    template<template<typename>typename FN_MIXIN>
+    struct ImplFor <Async<FN_MIXIN>> {
+        typedef container::TypeMap<container::Binding<
+            DeMux<Meta<SimpleCPUAsyncImpl>,Async<FN_MIXIN>>,
+            container::TypeSet<container::Method<FN_MIXIN>>
+        >> type;
+    };
+
 };
 
 
-typedef MetaModule<Schedule,ScheduleMetaModule> ScheduleModule;
-
-using ModuleA = context::SimpleModule <
-    Meta<ComponentA>,
-    context::RequirementSet<TraitY>,
-    context::ImplementationSet<TraitX>
+using EvenModule = context::SimpleModule <
+    Meta<Even>,
+    context::RequirementSet<
+        State,
+        Async<Even>,
+        Async<Odd>
+    >,
+    context::ImplementationSet<container::Method<Even>>
 >;
 
-using ModuleB = context::SimpleModule <
-    Meta<ComponentB>,
-    context::RequirementSet<TraitX>,
-    context::ImplementationSet<TraitY>
+using OddModule = context::SimpleModule <
+    Meta<Odd>,
+    context::RequirementSet<
+        State,
+        Async<Even>
+    >,
+    context::ImplementationSet<container::Method<Odd>>
+>;
+
+using StartUpModule = context::SimpleModule <
+    Meta<StartUp>,
+    context::RequirementSet<
+        State,
+        Async<Even>,
+        Async<Odd>
+    >,
+    context::ImplementationSet<container::Method<StartUp>>
+>;
+
+using StateModule = context::SimpleModule <
+    StepCounts,
+    context::ImplementationSet<State>
 >;
 
 using RootModule = context::ModuleBundle<
-    ModuleA,
-    ModuleB
+    CPUAsyncModule,
+    EvenModule,
+    OddModule,
+    StartUpModule,
+    StateModule
 >;
 
 
@@ -124,25 +214,12 @@ using RootModule = context::ModuleBundle<
 template<typename CTX>
 void run() {
  
+    CTX ctx;
     if constexpr (CTX::Info::SATISFIED) {
-        
-        CTX ctx(
-            init<TraitX>(1234),
-            init<TraitY>(56.78)
-        );
-
-        std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
-        std::cout << "Y is: " << as<TraitY>(ctx).y << std::endl;
-
-        as<TraitY>(ctx).get_x() = 4321;
-        as<TraitX>(ctx).get_y() = 87.65;
-
-        std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
-        std::cout << "Y is: " << as<TraitY>(ctx).y << std::endl;
-
+        as<container::Method<StartUp>>(ctx)(1);
     } else {
-        CTX ctx;
         std::cout << as<context::ContextInfo>(ctx).error_string();
+        std::cout << as<context::ContextInfo>(ctx).solve_sequence_string();
     }
 
 }
@@ -153,8 +230,8 @@ int main() {
     using namespace context;   
 
     typedef TypeMap<
-        Binding<key::RootModule,RootModule>,
-        Binding<key::RequirementSet,TypeSet<TraitX,TraitY>>
+        Binding<context::key::RootModule,RootModule>,
+        Binding<context::key::RequirementSet,TypeSet<Method<StartUp>>>
     > InputState;
 
     typedef typename context::CreateContextType<InputState>::type Ctx;

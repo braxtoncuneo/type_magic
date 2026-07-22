@@ -7,11 +7,25 @@ struct DeMux{};
 
 namespace multiplex {
 
+    template<typename TYPE>
+    struct IsDeMux {
+        static constexpr bool value = false;
+    };
+    
+    template<typename IMPL, typename LABEL>
+    struct IsDeMux <DeMux<IMPL,LABEL>> {
+        static constexpr bool value = true;
+    };
+
     template<typename ACC, typename ELEM, typename ENABLE=void>
     struct ImplMapFolder;
    
     template <typename... ACC_BINDINGS, typename BINDING>
-    struct ImplMapFolder <container::TypeMap<ACC_BINDINGS...>,BINDING,void> {
+    struct ImplMapFolder <
+        container::TypeMap<ACC_BINDINGS...>,
+        BINDING,
+        typename std::enable_if<!IsDeMux<typename BINDING::KeyType>::value>::type
+    > {
         typedef typename container::TypeMap<ACC_BINDINGS...,BINDING> type;
     };
    
@@ -19,7 +33,7 @@ namespace multiplex {
     struct ImplMapFolder <
         container::TypeMap<ACC_BINDINGS...>,
         container::Binding<DeMux<IMPL,LABEL>,REQ_SET>,
-        typename std::enable_if<container::TypeMap<ACC_BINDINGS...>::template has_key<IMPL>>::type
+        typename std::enable_if<container::TypeMap<ACC_BINDINGS...>::template has_key<IMPL>()>::type
     > {
         typedef container::TypeMap<ACC_BINDINGS...> Acc;
         typedef typename Acc::template ItemAt<IMPL>::type MuxReqSet;
@@ -31,9 +45,9 @@ namespace multiplex {
     struct ImplMapFolder <
         container::TypeMap<ACC_BINDINGS...>,
         container::Binding<DeMux<IMPL,LABEL>,REQ_SET>,
-        typename std::enable_if<!container::TypeMap<ACC_BINDINGS...>::template has_key<IMPL>>::type
+        typename std::enable_if<!container::TypeMap<ACC_BINDINGS...>::template has_key<IMPL>()>::type
     > {
-        typedef container::Binding<DeMux<IMPL,LABEL>,REQ_SET> NextBinding;
+        typedef container::Binding<IMPL,REQ_SET> NextBinding;
         typedef typename container::TypeMap<ACC_BINDINGS...,NextBinding> type;
     };
 

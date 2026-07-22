@@ -425,20 +425,19 @@ namespace context {
     template<typename STATE>
     struct ContextInfoImpl {
 
-        typedef typename STATE::template ItemAt<context::key::Sequence>::type Sequence;
+        typedef typename context::EvalTransform<InputState>::Sequence Sequence;
         typedef typename STATE::template ItemAt<context::key::RootModule>::type Root;
-        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type CheckInfo;
         
         template<typename CONTEXT>
         struct Impl {
             typedef Root RootModule;
-            static constexpr bool SATISFIED = CheckInfo::ALL_REQS_SATISFIED;
+            static constexpr bool SATISFIED = CHECK::ALL_REQS_SATISFIED;
 
             static std::string error_string() {
-                return CheckInfo::unsat_diagnostic_string();
+                return CHECK::unsat_diagnostic_string();
             }
             static std::string solve_sequence_string() {
-                return container::repr::StringRepr<Sequence>::repr();
+                return CHECK::unsat_diagnostic_string();
             }
         };
     };
@@ -808,6 +807,8 @@ namespace context {
         typename std::enable_if<STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
     > {
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type    UnculledTraitMap;
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
+        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
 
         typedef typename UnculledTraitMap::template MapItems<container::util::type_set::GetFirst>::type CulledTraitMap; 
         typedef typename CulledTraitMap::Invert::type::KeySet BaseComponentSet;
@@ -831,6 +832,8 @@ namespace context {
         STATE,
         typename std::enable_if<! STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
     > {
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
+        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
         typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<STATE>::template Impl>>> TraitMap;
         typedef container::TypeSet<Meta<ContextInfoImpl<STATE>::template Impl>> ComponentSet;
 
@@ -871,13 +874,12 @@ namespace context {
                          ::template DefaultItem<context::key::TraitMap,container::TypeMap<>>::type
                          ::template DefaultItem<context::key::ImplMap,container::TypeMap<>>::type
                          ::template DefaultItem<context::key::TransformQueue,DefaultTformQueue>::type
-                         ::template DefaultItem<key::Sequence,container::TypeArray<>>::type
                          InputState;
 
         typedef typename context::EvalTransform<InputState>::type State;
 
         #ifdef HARMONIZE_TRACK_SEQUENCE
-        typedef typename State::template ItemAt<context::key::Sequence>::type  Sequence;
+        typedef typename context::EvalTransform<InputState>::Sequence Sequence;
         #endif
 
         typedef typename State::template ItemAt<context::key::ContextType>::type type;
