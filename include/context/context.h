@@ -880,7 +880,31 @@ namespace context {
         typedef typename State::template ItemAt<context::key::Sequence>::type  Sequence;
         #endif
 
-        typedef typename State::template ItemAt<context::key::ContextType>::type type;
+        typedef typename State::template ItemAt<context::key::ContextType>::type RawContext;
+
+
+        typedef typename RawContext::template ComponentLookup<ContextInfo> RawContextInfo;
+        struct ShortCheckInfo : RawContextInfo {};
+
+        template<typename TYPE>
+        struct ReplaceInfo {
+            typedef typename container::TypeArray<
+                    TYPE,
+                    ShortCheckInfo
+                >::template ItemAt<std::is_same<TYPE,RawContextInfo>::value>::type type;
+        };
+
+        template<typename TYPE>
+        struct CleanedContext;
+
+        template<typename TRAIT_MAP, typename... COMPONENTS>
+        struct CleanedContext <Context<TRAIT_MAP,COMPONENTS...>> {
+            typedef typename TRAIT_MAP::template Map<ReplaceInfo>::type UpdatedTraitMap;
+            typedef typename container::TypeSet<COMPONENTS...>::template Map<ReplaceInfo>::type UpdatedCompSet;
+            typedef typename ContextFromComponents<UpdatedTraitMap,UpdatedCompSet>::type type;
+        };
+
+        typedef void type;
 
     };
 
