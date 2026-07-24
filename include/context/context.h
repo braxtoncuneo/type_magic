@@ -697,9 +697,9 @@ namespace context {
     struct ContextComponent : COMPONENT {
         ContextComponent() = default;
 
-        ContextComponent(COMPONENT const& component) : COMPONENT(component) {}
+        ContextComponent(COMPONENT const& component) : COMPONENT{component} {}
 
-        ContextComponent(COMPONENT&& component) : COMPONENT(std::move(component)) {}
+        ContextComponent(COMPONENT&& component) : COMPONENT{std::move(component)} {}
 
         template<
             typename INIT,
@@ -717,7 +717,7 @@ namespace context {
     private:
         template<typename INIT, std::size_t... I>
         ContextComponent(INIT&& init, std::index_sequence<I...>)
-            : COMPONENT(std::get<I>(std::forward<INIT>(init).args)...)
+            : COMPONENT{std::get<I>(std::forward<INIT>(init).args)...}
         {}
     };
 
