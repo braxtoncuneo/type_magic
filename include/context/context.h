@@ -257,9 +257,15 @@ namespace context {
                 static constexpr bool value = REQ_SET::template Filter<TraitMissing<TRAIT_MAP>::template Selector>::type::MapType::ITEM_COUNT == 0;
             };
         };
-        
-        struct EarlyFailContextInfo {
+    }
+
+    namespace status { 
+        struct SimpleFailStatus {
             static constexpr bool ALL_REQS_SATISFIED = false;
+        };
+
+        struct SimpleSuccessStatus {
+            static constexpr bool ALL_REQS_SATISFIED = true;
         };
     
         struct EarlyFailContext {};
@@ -282,8 +288,8 @@ namespace context {
         typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
 
         typedef typename STATE
-                ::template SetItem<context::key::CheckInfo,prune::EarlyFailContextInfo>::type
-                ::template SetItem<context::key::ContextType,prune::EarlyFailContext>::type
+                ::template SetItem<context::key::Status,status::SimpleFailStatus>::type
+                ::template SetItem<context::key::ContextType,status::EarlyFailContext>::type
                 ::template SetItem<context::key::TransformQueue,container::TypeArray<>>::type
                 EarlyFailState;
 
@@ -418,6 +424,12 @@ namespace context {
     };
 
 
+    namespace info {
+        struct SimpleFailInfo {
+            static constexpr bool SATISFIED = false;
+        };
+    }
+
     // Trait representing the context reflection information provided to contexts
     struct ContextInfo {};
 
@@ -427,15 +439,15 @@ namespace context {
 
         typedef typename STATE::template ItemAt<context::key::Sequence>::type Sequence;
         typedef typename STATE::template ItemAt<context::key::RootModule>::type Root;
-        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type CheckInfo;
+        typedef typename STATE::template ItemAt<context::key::Status>::type Status;
         
         template<typename CONTEXT>
         struct Impl {
             typedef Root RootModule;
-            static constexpr bool SATISFIED = CheckInfo::ALL_REQS_SATISFIED;
+            static constexpr bool SATISFIED = Status::ALL_REQS_SATISFIED;
 
             static std::string error_string() {
-                return CheckInfo::unsat_diagnostic_string();
+                return Status::unsat_diagnostic_string();
             }
             static std::string solve_sequence_string() {
                 return container::repr::StringRepr<Sequence>::repr();
@@ -595,7 +607,7 @@ namespace context {
 
         // Update and return the state
         typedef typename UnsatState
-                ::template SetItem<context::key::CheckInfo,Check<STATE>>::type
+                ::template SetItem<context::key::Status,Check<STATE>>::type
                 ::template SetItem<context::key::TransformQueue,TformQueue>::type
                 type;
   
@@ -757,7 +769,6 @@ namespace context {
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
         typedef TRAIT_MAP TraitMap;
 
-
         template <typename TRAIT>
         static constexpr bool implements_trait () {
             return TRAIT_MAP::template has_key<TRAIT>();
@@ -765,9 +776,9 @@ namespace context {
 
         template<typename TRAIT>
         using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
-      
-        typedef  ComponentLookup<ContextInfo> Info;
 
+        typedef ComponentLookup<ContextInfo> Info;
+      
         template<typename TRAIT>
         ComponentLookup<TRAIT>& as() {
             if constexpr (TRAIT_MAP::template has_key<TRAIT>()) {
@@ -805,19 +816,15 @@ namespace context {
     template<typename STATE>
     struct Reify <
         STATE,
-        typename std::enable_if<STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+        typename std::enable_if<STATE::template ItemAt<context::key::Status>::type::ALL_REQS_SATISFIED>::type
     > {
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type    UnculledTraitMap;
 
         typedef typename UnculledTraitMap::template MapItems<container::util::type_set::GetFirst>::type CulledTraitMap; 
-        typedef typename CulledTraitMap::Invert::type::KeySet BaseComponentSet;
+        typedef typename CulledTraitMap::template SetItem<ContextInfo,info::SimpleFailInfo>::type TraitMap;
 
-        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<STATE>::template Impl>>>
-                                  ::template LossyCombine<CulledTraitMap>::type TraitMap;
-        
-        typedef typename container::TypeSet<Meta<ContextInfoImpl<STATE>::template Impl>>
-                                  ::template Union<BaseComponentSet>::type ComponentSet;
-
+        typedef typename TraitMap::Invert::type::KeySet BaseComponentSet;
+        typedef typename BaseComponentSet::template Union<container::TypeSet<info::SimpleFailInfo>>::type ComponentSet;
 
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
 
@@ -829,10 +836,10 @@ namespace context {
     template<typename STATE>
     struct Reify <
         STATE,
-        typename std::enable_if<! STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+        typename std::enable_if<! STATE::template ItemAt<context::key::Status>::type::ALL_REQS_SATISFIED>::type
     > {
-        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<STATE>::template Impl>>> TraitMap;
-        typedef container::TypeSet<Meta<ContextInfoImpl<STATE>::template Impl>> ComponentSet;
+        typedef container::TypeMap<container::Binding<ContextInfo,info::SimpleFailInfo>> TraitMap;
+        typedef container::TypeSet<info::SimpleFailInfo> ComponentSet;
 
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
 
@@ -883,28 +890,20 @@ namespace context {
         typedef typename State::template ItemAt<context::key::ContextType>::type RawContext;
 
 
-        typedef typename RawContext::template ComponentLookup<ContextInfo> RawContextInfo;
-        struct ShortCheckInfo : RawContextInfo {};
-
-        template<typename TYPE>
-        struct ReplaceInfo {
-            typedef typename container::TypeArray<
-                    TYPE,
-                    ShortCheckInfo
-                >::template ItemAt<std::is_same<TYPE,RawContextInfo>::value>::type type;
-        };
+        struct ShortState : State {};
 
         template<typename TYPE>
         struct CleanedContext;
 
         template<typename TRAIT_MAP, typename... COMPONENTS>
         struct CleanedContext <Context<TRAIT_MAP,COMPONENTS...>> {
-            typedef typename TRAIT_MAP::template Map<ReplaceInfo>::type UpdatedTraitMap;
-            typedef typename container::TypeSet<COMPONENTS...>::template Map<ReplaceInfo>::type UpdatedCompSet;
+            typedef Meta<ContextInfoImpl<ShortState>::template Impl> Info;
+            typedef typename TRAIT_MAP::template SetItem<ContextInfo,Info>::type UpdatedTraitMap;
+            typedef typename container::TypeSet<COMPONENTS...>::template Union<container::TypeSet<Info>>::type UpdatedCompSet;
             typedef typename ContextFromComponents<UpdatedTraitMap,UpdatedCompSet>::type type;
         };
 
-        typedef void type;
+        typedef typename CleanedContext<RawContext>::type type;
 
     };
 

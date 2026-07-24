@@ -1119,6 +1119,7 @@ struct TypeSet
 
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
     typedef TypeSet<ELEMENTS...> SelfType;
+    typedef TypeArray<ELEMENTS...> ItemArray;
 
     static constexpr size_t ITEM_COUNT = MapType::ITEM_COUNT;
 

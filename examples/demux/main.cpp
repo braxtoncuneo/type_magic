@@ -9,6 +9,9 @@
 struct State{};
 
 template<template<typename>typename FN_MIXIN>
+struct AsyncCall {};
+
+template<template<typename>typename FN_MIXIN>
 struct Async {};
 
 
@@ -26,39 +29,43 @@ struct IsAsync {
 
 template<template<typename>typename FN_MIXIN>
 struct IsAsync <Async<FN_MIXIN>> {
-    static constexpr bool value = false;
+    static constexpr bool value = true;
 };
 
 
 
 // Components
 template<typename CONTEXT>
-struct SimpleCPUAsyncImpl {
+struct SimpleCPUAsyncImpl;
 
+template<typename TRAIT_MAP, typename... COMPONENTS>
+struct SimpleCPUAsyncImpl<context::Context<TRAIT_MAP,COMPONENTS...>> {
+
+    typedef context::Context<TRAIT_MAP,COMPONENTS...> Context;
+    typedef TRAIT_MAP TraitMap;
 
     template<typename TYPE>
     struct ComponentTypeFromMixin;
 
     template<template<typename>typename MIXIN>
     struct ComponentTypeFromMixin <Async<MIXIN>> {
-        typedef container::Fn<MIXIN<CONTEXT>::operator()> type;
+        typedef container::Fn<&MIXIN<Context>::operator()> type;
     };
 
-    typedef typename CONTEXT::TraitMap::KeySet::template Filter<IsAsync>::type AsyncSet;
+    typedef typename TraitMap::KeySet::template Filter<IsAsync>::type AsyncSet;
     typedef typename AsyncSet::template Map<ComponentTypeFromMixin>::type FunctionSet;
-    typedef container::ArrayVariant<typename FunctionSet::ArrayType> VariantType;
-    typedef typename VariantType::MapType::template Invert<>::type FnMap;
+    typedef container::ArrayVariant<typename FunctionSet::ItemArray> VariantType;
+    typedef typename VariantType::MapType::Invert::type FnMap;
+
 
     std::vector<VariantType> tasks;
     
     template<typename FN,typename... ARGS>
     void call(ARGS... args) {
-        if (FN::IS_STATIC) {
-            tasks.push_back(container::FnObj<typename FnMap::template ItemAt<FN>::type>{}.bind(args...));
-        } else {
-            auto self = &via<FN>(this);
-            tasks.push_back(container::FnObj<typename FnMap::template ItemAt<FN>::type>{self}.bind(args...));
-        }
+        //VariantType fn_variant;
+        //fn_varient.get<FnMap::template ItemAt<FN>::type::value>()
+        //tasks.push_back(typename {}.bind(FN::function(args...)));
+        FN::function(args...);
     }
 
 
@@ -71,6 +78,21 @@ struct SimpleCPUAsyncImpl {
 
 };
 
+template<template<typename>typename MIXIN>
+struct AsyncTrampoline {
+
+    template<typename CONTEXT>
+    struct Impl {
+        
+        template<typename... ARGS>
+        void operator()(ARGS... args) {
+            typedef container::Fn<&MIXIN<CONTEXT>::operator()> FnTrait;
+            via<AsyncCall<MIXIN>>(this).template call<FnTrait>(&via<container::Method<MIXIN>>(this),args...);
+        }
+
+    };
+
+};
 
 
 struct StepCounts {
@@ -94,14 +116,15 @@ struct Even {
     void operator()(CollazIter iter) {
         using namespace container;
         if (iter.value <= 1) {
-            as<State>(this).steps[iter.start_value] = iter.step_count;
+            via<State>(this).steps[iter.start_value] = iter.step_count;
+            std::cout << iter.start_value << " : " << iter.step_count << std::endl;
         } else {
             iter.value /= 2;
             iter.step_count ++;
             if ( (iter.value%2) == 0 ) {
-                as<Async<Even>>(this)(iter);
+                via<Async<Even>>(this)(iter);
             } else {
-                as<Async<Odd>>(this)(iter);
+                via<Async<Odd>>(this)(iter);
             }
         }
     }
@@ -114,12 +137,13 @@ struct Odd {
     void operator()(CollazIter iter) {
         using namespace container;
         if (iter.value <= 1) {
-            as<State>(this).steps[iter.start_value] = iter.step_count;
+            via<State>(this).steps[iter.start_value] = iter.step_count;
+            std::cout << iter.start_value << " : " << iter.step_count << std::endl;
         } else {
             iter.value *= 3;
             iter.value += 1;
             iter.step_count ++;
-            as<Async<Even>>(this)(iter);
+            via<Async<Even>>(this)(iter);
         }
     }
 
@@ -136,9 +160,9 @@ struct StartUp {
         for (uint64_t i=0; i<limit; i++) {
             via<State>(this).steps[i] = 0;
             if ( (i%2) == 0 ) {
-                via<Async<Even>>(this).template call(CollazIter{i,0,i});
+                via<Async<Even>>(this)(CollazIter{i,0,i});
             } else {
-                via<Async<Odd>>(this).template call(CollazIter{i,0,i});
+                via<Async<Odd>>(this)(CollazIter{i,0,i});
             }
         }
     }
@@ -157,10 +181,27 @@ struct CPUAsyncModule {
     };
 
     template<template<typename>typename FN_MIXIN>
+    struct ImplFor <AsyncCall<FN_MIXIN>> {
+        typedef container::TypeMap<container::Binding<
+            DeMux<Meta<SimpleCPUAsyncImpl>,AsyncCall<FN_MIXIN>>,
+            container::TypeSet<container::Method<FN_MIXIN>>
+        >> type;
+    };
+
+};
+
+struct AsyncTrampolineModule {
+
+    template <typename TRAIT>
+    struct ImplFor {
+        typedef container::TypeMap<> type;
+    };
+
+    template<template<typename>typename FN_MIXIN>
     struct ImplFor <Async<FN_MIXIN>> {
         typedef container::TypeMap<container::Binding<
-            DeMux<Meta<SimpleCPUAsyncImpl>,Async<FN_MIXIN>>,
-            container::TypeSet<container::Method<FN_MIXIN>>
+            Meta<AsyncTrampoline<FN_MIXIN>::template Impl>,
+            container::TypeSet<AsyncCall<FN_MIXIN>>
         >> type;
     };
 
@@ -203,6 +244,7 @@ using StateModule = context::SimpleModule <
 
 using RootModule = context::ModuleBundle<
     CPUAsyncModule,
+    AsyncTrampolineModule,
     EvenModule,
     OddModule,
     StartUpModule,
@@ -216,7 +258,7 @@ void run() {
  
     CTX ctx;
     if constexpr (CTX::Info::SATISFIED) {
-        as<container::Method<StartUp>>(ctx)(1);
+        as<container::Method<StartUp>>(ctx)(10);
     } else {
         std::cout << as<context::ContextInfo>(ctx).error_string();
         std::cout << as<context::ContextInfo>(ctx).solve_sequence_string();
