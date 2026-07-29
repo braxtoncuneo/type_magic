@@ -71,7 +71,7 @@ struct Method {
 
 
 
-
+/*
 
 template <typename... ARGS>
 struct FnObj;
@@ -138,7 +138,7 @@ struct FuncMap <TypeMap<ITEMS...>> {
         return TypeMap<ITEMS...>::MapType::template ItemAt<KEY>::func(args...);
     }
 };
-
+*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // FuncSet

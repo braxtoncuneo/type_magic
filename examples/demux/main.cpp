@@ -203,6 +203,7 @@ struct AsyncTrampolineModule {
             Meta<AsyncTrampoline<FN_MIXIN>::template Impl>,
             container::TypeSet<AsyncCall<FN_MIXIN>>
         >> type;
+        static_assert(std::is_same<Async<FN_MIXIN>,void>::value);
     };
 
 };
@@ -242,16 +243,6 @@ using StateModule = context::SimpleModule <
     context::ImplementationSet<State>
 >;
 
-using RootModule = context::ModuleBundle<
-    CPUAsyncModule,
-    AsyncTrampolineModule,
-    EvenModule,
-    OddModule,
-    StartUpModule,
-    StateModule
->;
-
-
 
 template<typename CTX>
 void run() {
@@ -259,12 +250,24 @@ void run() {
     CTX ctx;
     if constexpr (CTX::Info::SATISFIED) {
         as<container::Method<StartUp>>(ctx)(10);
+        std::cout << container::repr::type_name<CTX>();
     } else {
         std::cout << as<context::ContextInfo>(ctx).error_string();
         std::cout << as<context::ContextInfo>(ctx).solve_sequence_string();
     }
 
 }
+
+
+struct RootModule : context::ModuleBundle<
+    CPUAsyncModule,
+    AsyncTrampolineModule,
+    EvenModule,
+    OddModule,
+    StartUpModule,
+    StateModule
+> {};
+
 
 int main() {
 

@@ -892,12 +892,15 @@ namespace context {
 
         struct ShortState : State {};
 
+        template<typename CONTEXT>
+        struct ShortInfo : ContextInfoImpl<ShortState>::template Impl<CONTEXT> {};
+
         template<typename TYPE>
         struct CleanedContext;
 
         template<typename TRAIT_MAP, typename... COMPONENTS>
         struct CleanedContext <Context<TRAIT_MAP,COMPONENTS...>> {
-            typedef Meta<ContextInfoImpl<ShortState>::template Impl> Info;
+            typedef Meta<ShortInfo> Info;
             typedef typename TRAIT_MAP::template SetItem<ContextInfo,Info>::type UpdatedTraitMap;
             typedef typename container::TypeSet<COMPONENTS...>::template Union<container::TypeSet<Info>>::type UpdatedCompSet;
             typedef typename ContextFromComponents<UpdatedTraitMap,UpdatedCompSet>::type type;
