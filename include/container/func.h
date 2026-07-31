@@ -10,6 +10,7 @@ namespace container {
 template<auto FUNC>
 struct Fn {
     static constexpr bool IS_FUNCTION = false;
+    static constexpr bool IS_STATIC   = false;
 };
 
 template<typename RETURN, typename CLASS, typename... ARGS,RETURN (CLASS::*FUNC)(ARGS...)>
@@ -71,7 +72,6 @@ struct Method {
 
 
 
-/*
 
 template <typename... ARGS>
 struct FnObj;
@@ -79,15 +79,15 @@ struct FnObj;
 template <typename RETURN, typename... ARGS,RETURN FUNC(ARGS...)>
 struct FnObj <Fn<FUNC>> {
     private:
-    MapStruct<BINDINGS...> arg_tuple;
+    ArrayStruct<TypeArray<ARGS...>> arg_tuple;
+    static constexpr size_t ARG_COUNT = TypeArray<ARGS...>::ITEM_COUNT;
 
-    template<size_t INDEX, typename... ARGS>
-    inline decltype(auto) exec(ARGS... args) {
-        constexpr size_t count = MapStruct<BINDINGS...>::ITEM_COUNT;
-        if constexpr (INDEX == count) {
+    template<size_t INDEX, typename... UNPACK_ARGS>
+    inline decltype(auto) exec(UNPACK_ARGS... args) {
+        if constexpr (INDEX == ARG_COUNT) {
             return FUNC(args...);
-        } else if ( (INDEX>=0) && (INDEX<count) )  {
-            return exec<INDEX+1>(args...);
+        } else if ( (INDEX>=0) && (INDEX<ARG_COUNT) )  {
+            return exec<INDEX+1>(args...,arg_tuple.template get<INDEX>());
         } else {
             static_assert(
                 AlwaysFalse<TypeIndex<INDEX>>::value,
@@ -99,23 +99,53 @@ struct FnObj <Fn<FUNC>> {
 
     public:
 
-    template <typename... ARGS>
+    FnObj() = default;
+    FnObj(FnObj const &) = default;
+    FnObj& operator=(FnObj const &) = default;
+
     FnObj(ARGS... args)
         : arg_tuple(args...)
-    {
-        static_assert(
-            std::is_same<TypeArray<ARGS...>,typename Fn<FUNC>::NonStaticArgs>::value,
-            "Arguments provided to FnObj invocation do not match the set of unbound parameters."
-        );
+    {}
+
+    inline decltype(auto) operator()() {
+        return exec<0>();
     }
 
-    template <typename... ARGS>
-    inline decltype(auto) operator()(ARGS... args) {
-        static_assert(
-            std::is_same<TypeArray<ARGS...>,TypeArray<typename Fn<FUNC>::Class*>>::value,
-            "FnObj object is fully bound except for an implicit parameter. It will only accept parameters through its call operator."
-        );
-        exec<0>(args...);
+};
+
+template <typename RETURN, typename CLASS, typename... ARGS,RETURN (CLASS::*FUNC)(ARGS...)>
+struct FnObj <Fn<FUNC>> {
+    private:
+    ArrayStruct<TypeArray<CLASS*,ARGS...>> arg_tuple;
+    static constexpr size_t ARG_COUNT = TypeArray<CLASS*,ARGS...>::ITEM_COUNT;
+
+    template<size_t INDEX, typename... UNPACK_ARGS>
+    inline decltype(auto) exec(UNPACK_ARGS... args) {
+        if constexpr (INDEX == 0) {
+            return (arg_tuple.template get<INDEX>()->*FUNC)(args...);
+        } else if constexpr ( (INDEX>0) && (INDEX<ARG_COUNT) )  {
+            return exec<INDEX-1>(arg_tuple.template get<INDEX>(),args...);
+        } else {
+            static_assert(
+                AlwaysFalse<TypeIndex<INDEX>>::value,
+                ASSERT_TEXT("FnObj object invocation unrolling encountered an invalid parameter index.")
+            );
+            return UndefinedType::value;
+        }
+    }
+
+    public:
+    
+    FnObj() = default;
+    FnObj(FnObj const &) = default;
+    FnObj& operator=(FnObj const &) = default;
+
+    FnObj(CLASS* self, ARGS... args)
+        : arg_tuple(self,args...)
+    {}
+
+    inline decltype(auto) operator()() {
+        return exec<ARG_COUNT-1>();
     }
 
 };
@@ -138,7 +168,6 @@ struct FuncMap <TypeMap<ITEMS...>> {
         return TypeMap<ITEMS...>::MapType::template ItemAt<KEY>::func(args...);
     }
 };
-*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // FuncSet

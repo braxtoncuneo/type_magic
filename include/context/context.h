@@ -13,36 +13,7 @@
 #include <type_traits>
 #include <utility>
 
-template<typename TRAIT, typename TUPLE>
-struct Init {
-    typedef TRAIT Trait;
-    typedef TUPLE Tuple;
-
-    TUPLE args;
-
-    explicit Init(TUPLE&& args) : args(std::forward<TUPLE>(args)) {}
-    Init(Init const&) = delete;
-    Init& operator=(Init const&) = delete;
-    Init(Init&&) = default;
-    Init& operator=(Init&&) = delete;
-};
-
-template<typename TYPE>
-struct IsInit {
-    static constexpr bool value = false;
-};
-
-template<typename TRAIT, typename TUPLE>
-struct IsInit<Init<TRAIT,TUPLE>> {
-    static constexpr bool value = true;
-};
-
-template<typename TRAIT, typename... ARGS>
-auto init(ARGS&&... args) {
-    return Init<TRAIT,decltype(std::forward_as_tuple(std::forward<ARGS>(args)...))>(
-        std::forward_as_tuple(std::forward<ARGS>(args)...)
-    );
-}
+using container::init::init;
 
 namespace context {
 
@@ -726,7 +697,7 @@ namespace context {
 
         template<
             typename INIT,
-            typename ENABLE=typename std::enable_if<::IsInit<typename std::decay<INIT>::type>::value>::type
+            typename ENABLE=typename std::enable_if<::container::init::IsInit<typename std::decay<INIT>::type>::value>::type
         >
         explicit ContextComponent(INIT&& init)
             : ContextComponent(
@@ -747,7 +718,7 @@ namespace context {
     template<
         typename CONTEXT,
         typename ARG,
-        bool IS_INIT=::IsInit<typename std::decay<ARG>::type>::value
+        bool IS_INIT=::container::init::IsInit<typename std::decay<ARG>::type>::value
     >
     struct ContextComponentForArg {
         typedef ContextComponent<typename std::decay<ARG>::type> type;
@@ -914,15 +885,101 @@ namespace context {
 
 
 
+namespace detector {
+
+    template<typename TYPE>
+    struct Detect {
+        static constexpr bool IS_CONTEXT   = false;
+        static constexpr bool IS_COMPONENT = false;
+        static constexpr bool RECOGNIZED   = false;
+    };
+
+    template<
+        typename TRAIT_MAP,
+        typename...COMPONENTS
+    >
+    struct Detect <context::Context<TRAIT_MAP,COMPONENTS...>> {
+        static constexpr bool IS_CONTEXT   = true;
+        static constexpr bool IS_COMPONENT = false;
+        static constexpr bool RECOGNIZED   = true;
+    };
+
+    template<
+        template<typename> typename START_COMP,
+        typename TRAIT_MAP,
+        typename...COMPONENTS
+    >
+    struct Detect <START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>> {
+        static constexpr bool IS_CONTEXT   = false;
+        static constexpr bool IS_MIXIN_COMPONENT = std::is_base_of<
+                START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+                context::Context<TRAIT_MAP,COMPONENTS...>
+            >::value;
+        static constexpr bool RECOGNIZED   = IS_MIXIN_COMPONENT;
+    };
+
+}
+
+template<typename TRAIT,typename TYPE>
+typename std::enable_if<!detector::Detect<TYPE>::RECOGNIZED, UndefinedType>::type& as(TYPE value) {
+        static_assert(
+            AlwaysFalse<TYPE>::value,
+            ASSERT_TEXT("Input to `as` must be either:\n    - a pointer/reference to a context (Context<TYPE_MAP,COMPONENTS...>)\n    - a pointer/reference to a template specialization which is both specialized on the context type and a parent of the context type (COMPONENT<Context<TYPE_MAP,COMPONENTS...>>).")
+        );
+        return UndefinedType::value;
+}
+
 template<
     typename TRAIT,
     typename TRAIT_MAP,
-    typename...COMPONENTS
+    typename... COMPONENTS
 >
-auto& as(context::Context<TRAIT_MAP,COMPONENTS...>& context) {
+auto& as(context::Context<TRAIT_MAP,COMPONENTS...> &context) {
     return context.template as<TRAIT>();
 }
 
+template<
+    typename TRAIT,
+    typename TRAIT_MAP,
+    typename... COMPONENTS
+>
+auto& as(context::Context<TRAIT_MAP,COMPONENTS...> *context) {
+    return (*context).template as<TRAIT>();
+}
+
+template<
+    typename TRAIT,
+    template<typename> typename START_COMP,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& as(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>> *comp) {
+    static_assert(
+        std::is_base_of<
+            START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+            context::Context<TRAIT_MAP,COMPONENTS...>
+        >::value,
+        ASSERT_TEXT("Input to `as` must be a pointer/reference to a context or a template specialization which is both specialized on the context type and a parent of the context type.")
+    );
+    return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
+}
+
+template<
+    typename TRAIT,
+    template<typename> typename START_COMP,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& as(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>> &comp) {
+    static_assert(
+        std::is_base_of<
+            START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+            context::Context<TRAIT_MAP,COMPONENTS...>
+        >::value,
+        ASSERT_TEXT("Input to `as` must be a pointer/reference to a context or a template specialization which is both specialized on the context type and a parent of the context type.")
+    );
+    return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
+}
 
 
 
@@ -935,6 +992,10 @@ template<
 auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
     return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
 }
+
+
+
+
 
 template<typename TRAIT,typename CONTEXT>
 constexpr bool implements_trait() {

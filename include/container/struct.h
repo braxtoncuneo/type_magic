@@ -14,8 +14,14 @@ namespace container {
 
 template <typename MAP> struct MapStruct;
 
-template <typename... ITEMS>
-struct MapStruct <TypeMap<ITEMS...>> {
+template <>
+struct MapStruct <TypeMap<>> {
+
+    MapStruct() = default;
+    MapStruct(MapStruct const &other) = default;
+    MapStruct& operator=(MapStruct const &other) = default;
+    MapStruct(MapStruct &&other) = default;
+
     template<typename KEY>
     constexpr auto& get ()
     {
@@ -34,25 +40,22 @@ struct MapStruct <TypeMap<ITEMS...>> {
         );
     }
 
-    MapStruct() = default;
-    MapStruct(MapStruct &other) = default;
-    MapStruct(MapStruct &&other) = default;
-
 };
 
 
 template <typename HEAD>
 struct MapStruct <TypeMap<HEAD>> {
 
-    typedef typename TypeMap<HEAD>::DefaultStructOrder::type MapType;
-    typedef typename MapType::HeadItemType HeadItemType;
+    typedef typename util::type_map::DefaultStructOrder<TypeMap<HEAD>>::type MapType;
+    typedef typename HEAD::ItemType HeadItemType;
 
     private:
     HeadItemType data;
+    
     public:
-
     MapStruct() = default;
-    MapStruct(MapStruct &other) = default;
+    MapStruct(MapStruct const &other) = default;
+    MapStruct& operator=(MapStruct const &other) = default;
     MapStruct(MapStruct &&other) = default;
 
     MapStruct (HeadItemType data)
@@ -86,27 +89,32 @@ struct MapStruct <TypeMap<HEAD>> {
             return UndefinedType::value;
         }
     }
+    
 };
+
+
 
 
 template <typename HEAD, typename... TAIL>
 struct MapStruct <TypeMap<HEAD,TAIL...>> {
 
-    typedef typename TypeMap<HEAD,TAIL...>::DefaultStructOrder::type MapType;
+    //typedef typename util::type_map::DefaultStructOrder<TypeMap<HEAD,TAIL...>>::type MapType;
+    typedef TypeMap<HEAD,TAIL...> MapType;
     typedef typename MapType::HeadItemType HeadItemType;
     typedef MapStruct<TypeMap<TAIL...>> TailType;
 
     private:
     HeadItemType data;
     TailType tail;
-    public:
+    
 
+    public:
     MapStruct() = default;
-    MapStruct(MapStruct &other) = default;
+    MapStruct(MapStruct const &other) = default;
+    MapStruct& operator=(MapStruct const &other) = default;
     MapStruct(MapStruct &&other) = default;
 
-    template<typename... TAIL_ITEM_TYPES>
-    MapStruct (HeadItemType data, TAIL_ITEM_TYPES... tail_items)
+    MapStruct (HeadItemType data, typename TAIL::ItemType... tail_items)
         : data(data)
         , tail(tail_items...)
     {}
@@ -176,6 +184,14 @@ struct SetStruct <TypeSet<ITEMS...>> {
     {
         return map.template get<KEY>();
     }
+    
+    SetStruct() = default;
+    SetStruct(SetStruct const&) = default;
+    SetStruct &operator=(SetStruct const&) = default;
+
+    SetStruct(ITEMS... args)
+        : map(args...)
+    {}
 };
 
 
@@ -183,7 +199,7 @@ struct SetStruct <TypeSet<ITEMS...>> {
 // ArrayStruct
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename SET> struct ArrayStruct;
+template <typename ARRAY> struct ArrayStruct;
 
 template <typename... ITEMS>
 struct ArrayStruct <TypeArray<ITEMS...>> {
@@ -192,6 +208,7 @@ struct ArrayStruct <TypeArray<ITEMS...>> {
 
     private:
     MapStruct<MapType> map;
+
     public:
 
     template<size_t INDEX>
@@ -205,6 +222,16 @@ struct ArrayStruct <TypeArray<ITEMS...>> {
     {
         return map.template get<TypeIndex<INDEX>>();
     }
+
+    ArrayStruct() = default;
+    ArrayStruct(ArrayStruct const&) = default;
+    ArrayStruct &operator=(ArrayStruct const&) = default;
+
+    ArrayStruct(ITEMS... args)
+        : map(args...)
+    {}
+
+
 };
 
 
