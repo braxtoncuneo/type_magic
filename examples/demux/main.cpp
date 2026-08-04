@@ -63,7 +63,12 @@ struct SimpleCPUAsyncImpl<context::Context<TRAIT_MAP,COMPONENTS...>> {
 
 
     std::vector<VariantType> tasks;
-    
+   
+    SimpleCPUAsyncImpl() {
+        tasks.reserve(1000000);
+    }
+
+
     template<typename FN,typename... ARGS>
     inline constexpr void call(ARGS... args) {
         using namespace container;
@@ -309,7 +314,7 @@ int run() {
  
     CTX ctx;
     if constexpr (CTX::Info::SATISFIED) {
-        as<container::Method<StartUp>>(ctx)(10000);
+        as<container::Method<StartUp>>(ctx)(1000000);
         as<AsyncStartup>(ctx)();
         auto counts = as<State>(ctx).steps;
         size_t result = 0;
@@ -353,7 +358,9 @@ int main() {
 
     typedef typename context::CreateContextType<InputState>::type Ctx;
 
-    return run<Ctx>();
+    run<Ctx>();
+
+    return 0;
 }
 
 
