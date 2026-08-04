@@ -309,23 +309,37 @@ using StateModule = context::SimpleModule <
 >;
 
 
+uint64_t collaz(int value) {
+    uint64_t step_count = 0;
+    while(value > 1) {
+        value = (value%2 == 0) ? value/2 : value*3+1;
+        step_count ++;
+    }
+    return step_count;
+}
+
+
 template<typename CTX>
-int run() {
+void run() {
  
     CTX ctx;
     if constexpr (CTX::Info::SATISFIED) {
-        as<container::Method<StartUp>>(ctx)(1000000);
+        as<container::Method<StartUp>>(ctx)(10000);
         as<AsyncStartup>(ctx)();
         auto counts = as<State>(ctx).steps;
-        size_t result = 0;
+        bool pass = true;
         for(size_t i=0; i<counts.size(); i++) {
-            result += counts[i];
+            if (counts[i] != collaz(i)) {
+                pass = false;
+                std::cout << "Incorrect stopping time found for value="<<i<<". Aborting." << std::endl;
+            }
         }
-        return result;
+        if (pass) {
+            std::cout << "All stopping times found for values [0,"<<counts.size()<<") correct." << std::endl;
+        }
     } else {
         std::cout << as<context::ContextInfo>(ctx).error_string();
         std::cout << as<context::ContextInfo>(ctx).solve_sequence_string();
-        return 0;
     }
 
 }
