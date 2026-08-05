@@ -46,7 +46,28 @@ union MapUnion <TypeMap<HEAD,TAIL...>> {
     private:
     HeadItemType data;
     TailType tail;
+
+    template <typename TUPLE, std::size_t... INDEXES>
+    MapUnion(init::Init<typename MapType::HeadKeyType,TUPLE> &&initializer,std::index_sequence<INDEXES...>)
+        : data(std::get<INDEXES>(std::forward<TUPLE>(initializer.args))...)
+    {}
+
     public:
+
+    MapUnion() = default;
+    MapUnion(MapUnion const &) = default;
+    MapUnion &operator=(MapUnion const &) = default;
+
+    template <typename KEY, typename TUPLE>
+    MapUnion(init::Init<KEY,TUPLE> &&initializer)
+        : tail(std::forward<init::Init<KEY,TUPLE>>(initializer))
+    {}
+
+    template <typename TUPLE>
+    MapUnion(init::Init<typename MapType::HeadKeyType,TUPLE> &&initializer)
+        : MapUnion(std::forward<init::Init<typename MapType::HeadKeyType,TUPLE>>(initializer),std::make_index_sequence<std::tuple_size_v<std::remove_reference_t<TUPLE>>>{})
+    {}
+
 
     template<typename KEY>
     constexpr auto& get () const
@@ -98,6 +119,10 @@ struct SetUnion <TypeSet<ITEMS...>> {
     typedef typename TypeSet<ITEMS...>::MapType MapType;
 
     MapUnion<MapType> map;
+    
+    SetUnion() = default;
+    SetUnion(SetUnion const &) = default;
+    SetUnion &operator=(SetUnion const &) = default;
 
     template<typename KEY>
     constexpr auto& get ()
@@ -110,6 +135,13 @@ struct SetUnion <TypeSet<ITEMS...>> {
     {
         return map.template get<KEY>();
     }
+
+
+    template <typename KEY, typename TUPLE>
+    SetUnion(init::Init<KEY,TUPLE> &&initializer)
+        : map(std::forward<init::Init<KEY,TUPLE>>(initializer))
+    {}
+
 };
 
 
@@ -126,6 +158,9 @@ struct ArrayUnion <TypeArray<ITEMS...>> {
 
     MapUnion<MapType> map;
 
+    ArrayUnion() = default;
+    ArrayUnion(ArrayUnion const &) = default;
+    ArrayUnion &operator=(ArrayUnion const &) = default;
 
     template<size_t INDEX>
     constexpr auto& get () const
@@ -138,6 +173,11 @@ struct ArrayUnion <TypeArray<ITEMS...>> {
     {
         return map.template get<TypeIndex<INDEX>>();
     }
+    
+    template <typename KEY, typename TUPLE>
+    ArrayUnion(init::Init<KEY,TUPLE> &&initializer)
+        : map(std::forward<init::Init<KEY,TUPLE>>(initializer))
+    {}
 };
 
 

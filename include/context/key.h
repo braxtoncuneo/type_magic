@@ -12,8 +12,9 @@ namespace key {
     struct UnculledMap{};
     struct TransformQueue{};
     struct RequirementSet{};
-    struct CheckInfo{};
+    struct Status{};
     struct ContextType{};
+    struct Sequence{};
 
 
     namespace search {

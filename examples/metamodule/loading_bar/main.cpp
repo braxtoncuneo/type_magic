@@ -207,8 +207,8 @@ void run()
     {
 
         CTX ctx(
-            init<ExecA>(1000),
-            init<ExecB>(1000)
+            init<ExecA>(1000u),
+            init<ExecB>(1000u)
         );
 
 

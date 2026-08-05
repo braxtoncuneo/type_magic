@@ -147,9 +147,6 @@ namespace context {
         );
         typedef check::TransformStateInfo<STATE> Info;
         typedef STATE type; 
-        #ifdef HARMONIZE_TRACK_SEQUENCE
-        typedef container::TypeArray<STATE> Sequence;
-        #endif
     };
 
     template<typename STATE>
@@ -170,15 +167,28 @@ namespace context {
         // The updated transform queue, with the current transform removed
         typedef typename TformQueue::template PopFront<>::type UpdatedTransformQueue;
         // The state that will be provided to the current transform
+        #ifdef HARMONIZE_TRACK_SEQUENCE
+        typedef typename STATE
+                ::template UpdateItem<key::TransformQueue,UpdatedTransformQueue>::type
+                PrimedState;
+        
+        typedef typename STATE::template SetItem<key::Sequence,container::TypeArray<>>::type
+                CleanedState;
+
+        typedef typename PrimedState
+                ::template ItemAt<key::Sequence>::type
+                ::template PushFront<CleanedState>::type
+                UpdatedSequence;
+
+        typedef typename PrimedState::template UpdateItem<key::Sequence,UpdatedSequence>::type
+                InputState;
+        #else
         typedef typename STATE::template UpdateItem<key::TransformQueue,UpdatedTransformQueue>::type InputState;
+        #endif
         // The result of the current transform
         typedef typename CurrentTransform::template Template<InputState>::Type::type NextState;
         // The result of the rest of the transformations
         typedef typename EvalTransform<NextState>::type type;  
-        // The sequence of states that led to the result
-        #ifdef HARMONIZE_TRACK_SEQUENCE
-        typedef typename EvalTransform<NextState>::Sequence::template PushFront<STATE>::type Sequence;
-        #endif
     };
 
 

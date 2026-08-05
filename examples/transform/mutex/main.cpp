@@ -1,4 +1,4 @@
-#include "../../include/include.h"
+#include "../../../include/include.h"
 
 #include <fstream>
 
@@ -94,7 +94,7 @@ struct TraitImplMutex {
 
         // Evaluate the rest of the transform, and retrieve its diagnostic information
         typedef typename context::EvalTransform<CandidateState>::type
-                ::template ItemAt<context::key::CheckInfo>::type
+                ::template ItemAt<context::key::Status>::type
                 CandidateInfo;
     
         static constexpr bool SATISFIED = CandidateInfo::ALL_REQS_SATISFIED;
@@ -261,12 +261,12 @@ using ColoredLogStyleModule = context::SimpleModule <
 
 
 
-using RootModule = context::ModuleBundle<
+struct RootModule : context::ModuleBundle<
     FileLogModule,
     PrintLogModule,
     StandardLogStyleModule,
     ColoredLogStyleModule
->;
+> {};
 
 
 
@@ -277,10 +277,12 @@ void run() {
         
         CTX ctx;
 
-        std::string log_name       = container::repr::type_name<CTX>();
+        std::string log_name       = container::repr::type_name<As<Log,CTX>>();
         std::string log_style_name = container::repr::type_name<As<LogStyle,CTX>>();
 
-        as<Log>(ctx).log(log_name + " " + log_style_name);
+        as<Log>(ctx).log("\n\nRunning...");
+        as<Log>(ctx).log(" - Log trait is implemented by component: " + log_name);
+        as<Log>(ctx).log(" - LogStyle trait is implemented by component: " + log_style_name);
 
     } else {
         CTX ctx;

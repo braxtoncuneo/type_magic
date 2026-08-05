@@ -1,0 +1,19 @@
+build-gcc:
+	g++ -O3 main.cpp -o main.exe -std=c++20 -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0 -fconcepts-diagnostics-depth=10
+
+build-clang:
+	clang++-15 -O3 -x c++ main.cpp -std=c++20 -Wall -frelaxed-template-template-args -DHARMONIZE_REORDER_STRUCT_MEMBERS=true -o main.exe
+
+perf-run:
+	g++ -O2 main.cpp -o main.exe -std=c++20 -Wall -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0 -fconcepts-diagnostics-depth=10 -g -pg
+	./main.exe
+	gprof ./main.exe | less
+
+perf-compile:
+	clang++-15 -x c++ main.cpp -std=c++20 -Wall -frelaxed-template-template-args -ftime-trace -DHARMONIZE_REORDER_STRUCT_MEMBERS=true -c -o main.exe
+
+debug-compile:
+	clang++-15  main.cpp -o main.exe -std=c++20 -Wall -ftemplate-backtrace-limit=0 -frelaxed-template-template-args -fcolor-diagnostics -DCOLOR_ASSERTS -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0 2>&1 | less -R
+
+debug-sequence:
+	clang++-15  main.cpp -o main.exe -std=c++20 -Wall -frelaxed-template-template-args -fcolor-diagnostics -DCOLOR_ASSERTS -DHARMONIZE_TRACK_SEQUENCE -DHARMONIZE_REORDER_STRUCT_MEMBERS=true  -ftemplate-backtrace-limit=0 2>&1 | less -R

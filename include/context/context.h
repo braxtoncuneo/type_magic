@@ -4,43 +4,16 @@
 #include "../container/mod.h"
 #include "key.h"
 #include "module.h"
+#include "demux.h"
 #include "transform.h"
+
 
 #include <iostream>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
-template<typename TRAIT, typename TUPLE>
-struct Init {
-    typedef TRAIT Trait;
-    typedef TUPLE Tuple;
-
-    TUPLE args;
-
-    explicit Init(TUPLE&& args) : args(std::forward<TUPLE>(args)) {}
-    Init(Init const&) = delete;
-    Init& operator=(Init const&) = delete;
-    Init(Init&&) = default;
-    Init& operator=(Init&&) = delete;
-};
-
-template<typename TYPE>
-struct IsInit {
-    static constexpr bool value = false;
-};
-
-template<typename TRAIT, typename TUPLE>
-struct IsInit<Init<TRAIT,TUPLE>> {
-    static constexpr bool value = true;
-};
-
-template<typename TRAIT, typename... ARGS>
-auto init(ARGS&&... args) {
-    return Init<TRAIT,decltype(std::forward_as_tuple(std::forward<ARGS>(args)...))>(
-        std::forward_as_tuple(std::forward<ARGS>(args)...)
-    );
-}
+using container::init::init;
 
 namespace context {
 
@@ -255,9 +228,15 @@ namespace context {
                 static constexpr bool value = REQ_SET::template Filter<TraitMissing<TRAIT_MAP>::template Selector>::type::MapType::ITEM_COUNT == 0;
             };
         };
-        
-        struct EarlyFailContextInfo {
+    }
+
+    namespace status { 
+        struct SimpleFailStatus {
             static constexpr bool ALL_REQS_SATISFIED = false;
+        };
+
+        struct SimpleSuccessStatus {
+            static constexpr bool ALL_REQS_SATISFIED = true;
         };
     
         struct EarlyFailContext {};
@@ -280,8 +259,8 @@ namespace context {
         typedef typename STATE::template ItemAt<context::key::RequirementSet>::type  ReqSet;
 
         typedef typename STATE
-                ::template SetItem<context::key::CheckInfo,prune::EarlyFailContextInfo>::type
-                ::template SetItem<context::key::ContextType,prune::EarlyFailContext>::type
+                ::template SetItem<context::key::Status,status::SimpleFailStatus>::type
+                ::template SetItem<context::key::ContextType,status::EarlyFailContext>::type
                 ::template SetItem<context::key::TransformQueue,container::TypeArray<>>::type
                 EarlyFailState;
 
@@ -416,18 +395,33 @@ namespace context {
     };
 
 
+    namespace info {
+        struct SimpleFailInfo {
+            static constexpr bool SATISFIED = false;
+        };
+    }
+
     // Trait representing the context reflection information provided to contexts
     struct ContextInfo {};
 
     // The standard implementation of ContextInfo
-    template<typename ROOT, typename CHECK>
+    template<typename STATE>
     struct ContextInfoImpl {
+
+        typedef typename STATE::template ItemAt<context::key::Sequence>::type Sequence;
+        typedef typename STATE::template ItemAt<context::key::RootModule>::type Root;
+        typedef typename STATE::template ItemAt<context::key::Status>::type Status;
+        
         template<typename CONTEXT>
         struct Impl {
-            typedef ROOT   Root;
-            static constexpr bool SATISFIED = CHECK::ALL_REQS_SATISFIED;
+            typedef Root RootModule;
+            static constexpr bool SATISFIED = Status::ALL_REQS_SATISFIED;
+
             static std::string error_string() {
-                return CHECK::unsat_diagnostic_string();
+                return Status::unsat_diagnostic_string();
+            }
+            static std::string solve_sequence_string() {
+                return container::repr::StringRepr<Sequence>::repr();
             }
         };
     };
@@ -584,7 +578,7 @@ namespace context {
 
         // Update and return the state
         typedef typename UnsatState
-                ::template SetItem<context::key::CheckInfo,Check<STATE>>::type
+                ::template SetItem<context::key::Status,Check<STATE>>::type
                 ::template SetItem<context::key::TransformQueue,TformQueue>::type
                 type;
   
@@ -703,7 +697,7 @@ namespace context {
 
         template<
             typename INIT,
-            typename ENABLE=typename std::enable_if<::IsInit<typename std::decay<INIT>::type>::value>::type
+            typename ENABLE=typename std::enable_if<::container::init::IsInit<typename std::decay<INIT>::type>::value>::type
         >
         explicit ContextComponent(INIT&& init)
             : ContextComponent(
@@ -724,7 +718,7 @@ namespace context {
     template<
         typename CONTEXT,
         typename ARG,
-        bool IS_INIT=::IsInit<typename std::decay<ARG>::type>::value
+        bool IS_INIT=::container::init::IsInit<typename std::decay<ARG>::type>::value
     >
     struct ContextComponentForArg {
         typedef ContextComponent<typename std::decay<ARG>::type> type;
@@ -746,7 +740,6 @@ namespace context {
         typedef Context<TRAIT_MAP,COMPONENTS...> Self;  
         typedef TRAIT_MAP TraitMap;
 
-
         template <typename TRAIT>
         static constexpr bool implements_trait () {
             return TRAIT_MAP::template has_key<TRAIT>();
@@ -754,9 +747,9 @@ namespace context {
 
         template<typename TRAIT>
         using ComponentLookup = typename UnMeta<typename TRAIT_MAP::template ItemAt<TRAIT>::type,Self>::Type;
-      
-        typedef  ComponentLookup<ContextInfo> Info;
 
+        typedef ComponentLookup<ContextInfo> Info;
+      
         template<typename TRAIT>
         ComponentLookup<TRAIT>& as() {
             if constexpr (TRAIT_MAP::template has_key<TRAIT>()) {
@@ -794,21 +787,15 @@ namespace context {
     template<typename STATE>
     struct Reify <
         STATE,
-        typename std::enable_if<STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+        typename std::enable_if<STATE::template ItemAt<context::key::Status>::type::ALL_REQS_SATISFIED>::type
     > {
         typedef typename STATE::template ItemAt<context::key::TraitMap>::type    UnculledTraitMap;
-        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
-        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
 
         typedef typename UnculledTraitMap::template MapItems<container::util::type_set::GetFirst>::type CulledTraitMap; 
-        typedef typename CulledTraitMap::Invert::type::KeySet BaseComponentSet;
+        typedef typename CulledTraitMap::template SetItem<ContextInfo,info::SimpleFailInfo>::type TraitMap;
 
-        typedef typename container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>>
-                                  ::template LossyCombine<CulledTraitMap>::type TraitMap;
-        
-        typedef typename container::TypeSet<Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>
-                                  ::template Union<BaseComponentSet>::type ComponentSet;
-
+        typedef typename TraitMap::Invert::type::KeySet BaseComponentSet;
+        typedef typename BaseComponentSet::template Union<container::TypeSet<info::SimpleFailInfo>>::type ComponentSet;
 
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
 
@@ -820,12 +807,10 @@ namespace context {
     template<typename STATE>
     struct Reify <
         STATE,
-        typename std::enable_if<! STATE::template ItemAt<context::key::CheckInfo>::type::ALL_REQS_SATISFIED>::type
+        typename std::enable_if<! STATE::template ItemAt<context::key::Status>::type::ALL_REQS_SATISFIED>::type
     > {
-        typedef typename STATE::template ItemAt<context::key::RootModule>::type  RootModule;
-        typedef typename STATE::template ItemAt<context::key::CheckInfo>::type   CheckInfo;
-        typedef container::TypeMap<container::Binding<ContextInfo,Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>>> TraitMap;
-        typedef container::TypeSet<Meta<ContextInfoImpl<RootModule,CheckInfo>::template Impl>> ComponentSet;
+        typedef container::TypeMap<container::Binding<ContextInfo,info::SimpleFailInfo>> TraitMap;
+        typedef container::TypeSet<info::SimpleFailInfo> ComponentSet;
 
         typedef typename context::ContextFromComponents<TraitMap,ComponentSet>::type ContextType;
 
@@ -856,6 +841,7 @@ namespace context {
             Meta<Prune>,
             Meta<Cull>, 
             Meta<Check>,
+            Meta<Multiplex>,
             Meta<Reify>
         > DefaultTformQueue;
 
@@ -863,15 +849,35 @@ namespace context {
                          ::template DefaultItem<context::key::TraitMap,container::TypeMap<>>::type
                          ::template DefaultItem<context::key::ImplMap,container::TypeMap<>>::type
                          ::template DefaultItem<context::key::TransformQueue,DefaultTformQueue>::type
+                         ::template DefaultItem<key::Sequence,container::TypeArray<>>::type
                          InputState;
 
         typedef typename context::EvalTransform<InputState>::type State;
 
         #ifdef HARMONIZE_TRACK_SEQUENCE
-        typedef typename context::EvalTransform<InputState>::Sequence Sequence;
+        typedef typename State::template ItemAt<context::key::Sequence>::type  Sequence;
         #endif
 
-        typedef typename State::template ItemAt<context::key::ContextType>::type type;
+        typedef typename State::template ItemAt<context::key::ContextType>::type RawContext;
+
+
+        struct ShortState : State {};
+
+        template<typename CONTEXT>
+        struct ShortInfo : ContextInfoImpl<ShortState>::template Impl<CONTEXT> {};
+
+        template<typename TYPE>
+        struct CleanedContext;
+
+        template<typename TRAIT_MAP, typename... COMPONENTS>
+        struct CleanedContext <Context<TRAIT_MAP,COMPONENTS...>> {
+            typedef Meta<ShortInfo> Info;
+            typedef typename TRAIT_MAP::template SetItem<ContextInfo,Info>::type UpdatedTraitMap;
+            typedef typename container::TypeSet<COMPONENTS...>::template Union<container::TypeSet<Info>>::type UpdatedCompSet;
+            typedef typename ContextFromComponents<UpdatedTraitMap,UpdatedCompSet>::type type;
+        };
+
+        typedef typename CleanedContext<RawContext>::type type;
 
     };
 
@@ -879,15 +885,101 @@ namespace context {
 
 
 
+namespace detector {
+
+    template<typename TYPE>
+    struct Detect {
+        static constexpr bool IS_CONTEXT   = false;
+        static constexpr bool IS_COMPONENT = false;
+        static constexpr bool RECOGNIZED   = false;
+    };
+
+    template<
+        typename TRAIT_MAP,
+        typename...COMPONENTS
+    >
+    struct Detect <context::Context<TRAIT_MAP,COMPONENTS...>> {
+        static constexpr bool IS_CONTEXT   = true;
+        static constexpr bool IS_COMPONENT = false;
+        static constexpr bool RECOGNIZED   = true;
+    };
+
+    template<
+        template<typename> typename START_COMP,
+        typename TRAIT_MAP,
+        typename...COMPONENTS
+    >
+    struct Detect <START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>> {
+        static constexpr bool IS_CONTEXT   = false;
+        static constexpr bool IS_MIXIN_COMPONENT = std::is_base_of<
+                START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+                context::Context<TRAIT_MAP,COMPONENTS...>
+            >::value;
+        static constexpr bool RECOGNIZED   = IS_MIXIN_COMPONENT;
+    };
+
+}
+
+template<typename TRAIT,typename TYPE>
+typename std::enable_if<!detector::Detect<TYPE>::RECOGNIZED, UndefinedType>::type& as(TYPE value) {
+        static_assert(
+            AlwaysFalse<TYPE>::value,
+            ASSERT_TEXT("Input to `as` must be either:\n    - a pointer/reference to a context (Context<TYPE_MAP,COMPONENTS...>)\n    - a pointer/reference to a template specialization which is both specialized on the context type and a parent of the context type (COMPONENT<Context<TYPE_MAP,COMPONENTS...>>).")
+        );
+        return UndefinedType::value;
+}
+
 template<
     typename TRAIT,
     typename TRAIT_MAP,
-    typename...COMPONENTS
+    typename... COMPONENTS
 >
-auto& as(context::Context<TRAIT_MAP,COMPONENTS...>& context) {
+auto& as(context::Context<TRAIT_MAP,COMPONENTS...> &context) {
     return context.template as<TRAIT>();
 }
 
+template<
+    typename TRAIT,
+    typename TRAIT_MAP,
+    typename... COMPONENTS
+>
+auto& as(context::Context<TRAIT_MAP,COMPONENTS...> *context) {
+    return (*context).template as<TRAIT>();
+}
+
+template<
+    typename TRAIT,
+    template<typename> typename START_COMP,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& as(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>> *comp) {
+    static_assert(
+        std::is_base_of<
+            START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+            context::Context<TRAIT_MAP,COMPONENTS...>
+        >::value,
+        ASSERT_TEXT("Input to `as` must be a pointer/reference to a context or a template specialization which is both specialized on the context type and a parent of the context type.")
+    );
+    return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
+}
+
+template<
+    typename TRAIT,
+    template<typename> typename START_COMP,
+    typename TRAIT_MAP,
+    typename...COMPONENTS
+>
+auto& as(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>> &comp) {
+    static_assert(
+        std::is_base_of<
+            START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>,
+            context::Context<TRAIT_MAP,COMPONENTS...>
+        >::value,
+        ASSERT_TEXT("Input to `as` must be a pointer/reference to a context or a template specialization which is both specialized on the context type and a parent of the context type.")
+    );
+    return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
+}
 
 
 
@@ -900,6 +992,10 @@ template<
 auto& via(START_COMP<context::Context<TRAIT_MAP,COMPONENTS...>>* comp) {
     return as<TRAIT>(*static_cast<context::Context<TRAIT_MAP,COMPONENTS...>*>(comp));
 }
+
+
+
+
 
 template<typename TRAIT,typename CONTEXT>
 constexpr bool implements_trait() {

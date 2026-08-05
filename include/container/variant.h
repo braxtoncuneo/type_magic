@@ -38,20 +38,26 @@ struct ArrayVariant <TypeArray<ITEMS...>> {
     private:
     size_t index_value;
 
+    protected:
+    ArrayUnion<TypeArray<ITEMS...>> field;
 
     public:
-
 
     template<size_t INDEX>
     struct ItemAt {
         typedef typename MapType::template ItemAt<TypeIndex<INDEX>>::type type;
     };
 
-
-    ArrayUnion<TypeArray<ITEMS...>> field;
-
     ArrayVariant()
         : index_value(ITEM_COUNT)
+    {}
+    ArrayVariant(ArrayVariant const &) = default;
+    ArrayVariant &operator=(ArrayVariant const &) = default;
+
+    template<std::size_t INDEX, typename TUPLE>
+    ArrayVariant(init::Init<TypeIndex<INDEX>,TUPLE> &&initializer)
+        : index_value(INDEX)
+        , field(std::forward<init::Init<TypeIndex<INDEX>,TUPLE>>(initializer))
     {}
 
     constexpr size_t index() const

@@ -231,6 +231,14 @@ namespace type_map {
 
     template <typename MAP, typename ENABLE=void>
     struct Sort;
+    
+    template <>
+    struct Sort <TypeMap<>,void> {
+        typedef Binding<char,char> BiggestBinding;
+        typedef TypeMap<> type;
+        typedef TypeMap<> Remainder;
+        typedef TypeMap<> RemainderSorted;
+    };
 
     template <typename HEAD, typename... TAIL>
     struct Sort<
@@ -263,7 +271,7 @@ namespace type_map {
     template <typename MAP>
     struct DefaultStructOrder<
         MAP,
-        typename std::enable_if<config::REORDER_STRUCT_MEMBERS>::type
+        typename std::enable_if<config::REORDER_STRUCT_MEMBERS,typename AlwaysVoid<MAP>::type>::type
     > {
         typedef typename Sort<MAP>::type type;
     };
@@ -1119,6 +1127,7 @@ struct TypeSet
 
     typedef TypeMap<Binding<ELEMENTS,ELEMENTS>...> MapType;
     typedef TypeSet<ELEMENTS...> SelfType;
+    typedef TypeArray<ELEMENTS...> ItemArray;
 
     static constexpr size_t ITEM_COUNT = MapType::ITEM_COUNT;
 
@@ -1285,6 +1294,7 @@ struct TypeArray
     };
 
     typedef typename TypeMapGenerator<0,ELEMENTS...>::type MapType;
+    static constexpr size_t ITEM_COUNT = MapType::ITEM_COUNT;
 
     template<size_t INDEX>
     static constexpr bool has_index()

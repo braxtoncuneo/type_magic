@@ -56,7 +56,7 @@ void run() {
         
         CTX ctx(
             init<TraitX>(1234),
-            init<TraitY>(56.78)
+            init<TraitY>(56.78f)
         );
 
         std::cout << "X is: " << as<TraitX>(ctx).x << std::endl;
