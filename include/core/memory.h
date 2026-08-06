@@ -1,6 +1,10 @@
 #ifndef HARMONIZE_CORE_MEMORY
 #define HARMONIZE_CORE_MEMORY
 
+#include <concepts>
+#include <cstddef>
+#include <cstdlib>
+
 #include "platform.h"
 
 namespace storage {
@@ -128,36 +132,49 @@ namespace scope {
 
 namespace alloc {
 
-    template<typename T>
-    concept HasAllocBytes = requires() {
-        { &T::alloc_bytes } -> std::same_as<void*(T::*)(size_t)>;
+    template<typename COMPONENT>
+    concept HasAllocBytes = requires(COMPONENT& component, std::size_t size) {
+        { component.alloc_bytes(size) } -> std::same_as<void*>;
     };
 
-    template<typename T>
-    concept HasFreeBytes = requires() {
-        { &T::free_bytes } -> std::same_as<void(T::*)(void*)>;
+    template<typename COMPONENT>
+    concept HasFreeBytes = requires(COMPONENT& component, void* ptr) {
+        { component.free_bytes(ptr) } -> std::same_as<void>;
     };
 
+    template<typename SPACE>
+    struct Alloc {};
+
+    template<typename SPACE>
     struct AllocBytes {
         template<typename COMPONENT>
         requires HasAllocBytes<COMPONENT> && HasFreeBytes<COMPONENT>
         struct Check {};
     };
 
+    template<typename OBJECT, typename SPACE>
+    struct AllocObject {};
+
+    template<typename ALLOC_TRAIT, std::size_t CAPACITY>
+    struct AllocMinCapacity {};
+
+    template<typename ALLOC_TRAIT>
+    struct AllocUtilization {};
+
 
     struct StdAllocBytesImpl {
-        void *alloc_bytes(size_t size) {
-            return malloc(size);
+        void *alloc_bytes(std::size_t size) {
+            return std::malloc(size);
         }
         void  free_bytes(void *ptr) {
-            free(ptr);
+            std::free(ptr);
         }
     };
 
     using StdAllocBytes = context::SimpleModule<
         StdAllocBytesImpl,
         context::RequirementSet<platform::CPU>,
-        context::ImplementationSet<AllocBytes>
+        context::ImplementationSet<AllocBytes<storage::cpu::Global>>
     >;
 
 }
