@@ -34,7 +34,7 @@ struct Robert {
 Components are organized through modules, which define an `ImplFor` template, which accepts a single type (a trait) and returns a `TypeMap` specialization as an inner type called `type`.
 This type defines a mapping where each key is a component implementing the queried trait and the value is a `TypeSet` specialization representing the set of all traits that are required by this component.
 
-The following is a module that contains only `Michael`, which requires nothing to implement `HasAName`L
+The following is a module that contains only `Michael`, which requires nothing to implement `HasAName`.
 
 ```cpp
 struct MichaelModule {
